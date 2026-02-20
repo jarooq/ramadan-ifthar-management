@@ -2852,11 +2852,38 @@
         // Handle ?page= URL parameter for direct links
         const urlParams = new URLSearchParams(window.location.search);
         const pageParam = urlParams.get('page');
+        const modeParam = urlParams.get('mode');
+
         if (pageParam) {
             const targetTab = document.querySelector('.nav-tab[data-page="' + pageParam + '"]');
             if (targetTab) {
                 targetTab.click();
             }
+        }
+
+        // Staff mode: hide everything except the target page
+        if (modeParam === 'staff') {
+            document.querySelector('.header').style.display = 'none';
+            document.querySelector('.nav-tabs').style.display = 'none';
+            document.querySelector('.main').style.maxWidth = '600px';
+            document.querySelector('.main').style.padding = '0';
+            // Hide all pages except updates
+            document.querySelectorAll('.page').forEach(p => p.style.display = 'none');
+            var staffPage = document.getElementById('page-' + (pageParam || 'updates'));
+            if (staffPage) staffPage.style.display = 'block';
+            // Show compose bar
+            var cb = document.getElementById('updCompose');
+            if (cb) cb.style.display = '';
+            // Add a small branded header for staff
+            var staffHeader = document.createElement('div');
+            staffHeader.style.cssText = 'background:linear-gradient(135deg,var(--primary-dark),var(--primary));color:white;padding:14px 16px;text-align:center;position:sticky;top:0;z-index:100;box-shadow:0 2px 8px rgba(0,0,0,0.15)';
+            staffHeader.innerHTML = '<div style="font-weight:700;font-size:1rem">' + esc(settings ? settings.orgName : 'Ifthar') + ' — Staff Updates</div><div style="font-size:0.72rem;opacity:0.8">Post cooking, distribution & activity updates</div>';
+            document.body.insertBefore(staffHeader, document.body.firstChild);
+            // Disable nav tab clicks (prevent escape)
+            document.querySelectorAll('.nav-tab').forEach(t => {
+                t.onclick = function(e) { e.preventDefault(); e.stopPropagation(); };
+                t.style.pointerEvents = 'none';
+            });
         }
     })();
     </script>
