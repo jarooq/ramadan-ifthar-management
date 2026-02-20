@@ -2848,6 +2848,16 @@
         await initFromServer();
         if (settings) { applySettings(); refresh(); }
         showSetupIfNeeded();
+
+        // Handle ?page= URL parameter for direct links
+        const urlParams = new URLSearchParams(window.location.search);
+        const pageParam = urlParams.get('page');
+        if (pageParam) {
+            const targetTab = document.querySelector('.nav-tab[data-page="' + pageParam + '"]');
+            if (targetTab) {
+                targetTab.click();
+            }
+        }
     })();
     </script>
 </body>
