@@ -40,6 +40,11 @@ app.use(express.json({ limit: '10mb' }));
 // Serve uploaded photos
 app.use('/uploads', express.static(UPLOADS_DIR));
 
+// Health check
+app.get('/health', (req, res) => {
+    res.json({ status: 'ok' });
+});
+
 // Serve index.html
 app.get('/', (req, res) => {
     res.sendFile(path.join(__dirname, 'index.html'));
