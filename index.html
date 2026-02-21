@@ -510,6 +510,7 @@
         <!-- DASHBOARD -->
         <div class="page active" id="page-dashboard">
             <div id="alerts-container"></div>
+            <div id="dashboard-today"></div>
             <div class="stats-grid" id="dashboard-stats"></div>
             <div class="card">
                 <div class="card-title" id="capacity-chart-title"></div>
@@ -2027,6 +2028,82 @@
         if (totalReceived > 0 && totalAllocated === 0) alerts += `<div class="alert alert-warning">&#9432; Meals received but not scheduled. Use Auto-Schedule in Daily Plan.</div>`;
         if (shortfall <= 0 && daysFullyAllocated === totalDays) alerts += `<div class="alert alert-success">&#10003; All ${totalDays} days fully planned!</div>`;
         document.getElementById('alerts-container').innerHTML = alerts;
+
+        // Today's Schedule
+        const todayContainer = document.getElementById('dashboard-today');
+        const now = new Date();
+        const todayStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+        const todayDay = appData.days.find(d => d.date === todayStr);
+        if (todayDay) {
+            const todayDate = new Date(todayDay.date + 'T00:00:00');
+            const dayName = DAY_NAMES_FULL[todayDate.getDay()];
+            const todayTotal = todayDay.allocations.reduce((s, a) => s + a.qty, 0);
+            const todayRemaining = cap - todayTotal;
+            const todayPct = cap > 0 ? Math.min(Math.round(todayTotal / cap * 100), 100) : 0;
+            const statusLabel = todayDay.status === 'distributed' ? 'Distributed' : todayDay.status === 'cooked' ? 'Cooked' : 'Pending';
+            const statusColor = todayDay.status === 'distributed' ? 'var(--info)' : todayDay.status === 'cooked' ? 'var(--success)' : 'var(--warning)';
+
+            let todayHtml = `<div class="card" style="border-left:4px solid ${statusColor};margin-bottom:16px">
+                <div class="card-title" style="margin-bottom:12px">
+                    <span>Today's Schedule - Day ${todayDay.day}</span>
+                    <span class="badge badge-${todayDay.status}" style="font-size:0.75rem">${statusLabel}</span>
+                </div>
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:4px">
+                    <span style="font-size:0.88rem;color:var(--gray-700)">${dayName}, ${formatDate(todayDay.date)}</span>
+                    <span style="font-size:0.88rem;font-weight:600">${todayTotal.toLocaleString()} / ${cap.toLocaleString()} meals planned</span>
+                </div>
+                <div class="progress-bar" style="height:10px;margin-bottom:14px">
+                    <div class="progress-fill ${todayPct >= 100 ? 'green' : todayPct >= 50 ? 'yellow' : 'red'}" style="width:${todayPct}%"></div>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:8px;margin-bottom:14px">
+                    <div style="background:var(--gray-50);border-radius:8px;padding:10px;text-align:center">
+                        <div style="font-size:0.7rem;color:var(--gray-500);text-transform:uppercase;font-weight:600">Planned</div>
+                        <div style="font-size:1.2rem;font-weight:700;color:var(--primary)">${todayTotal.toLocaleString()}</div>
+                    </div>
+                    <div style="background:var(--gray-50);border-radius:8px;padding:10px;text-align:center">
+                        <div style="font-size:0.7rem;color:var(--gray-500);text-transform:uppercase;font-weight:600">Cooked</div>
+                        <div style="font-size:1.2rem;font-weight:700;color:var(--success)">${todayDay.actualCooked.toLocaleString()}</div>
+                    </div>
+                    <div style="background:var(--gray-50);border-radius:8px;padding:10px;text-align:center">
+                        <div style="font-size:0.7rem;color:var(--gray-500);text-transform:uppercase;font-weight:600">Distributed</div>
+                        <div style="font-size:1.2rem;font-weight:700;color:var(--info)">${todayDay.actualDistributed.toLocaleString()}</div>
+                    </div>
+                    <div style="background:var(--gray-50);border-radius:8px;padding:10px;text-align:center">
+                        <div style="font-size:0.7rem;color:var(--gray-500);text-transform:uppercase;font-weight:600">${todayRemaining > 0 ? 'Gap' : 'Status'}</div>
+                        <div style="font-size:1.2rem;font-weight:700;color:${todayRemaining > 0 ? 'var(--danger)' : 'var(--success)'}">${todayRemaining > 0 ? todayRemaining.toLocaleString() : 'Full'}</div>
+                    </div>
+                </div>`;
+
+            if (todayDay.allocations.length > 0) {
+                todayHtml += `<div class="table-wrap"><table>
+                    <thead><tr><th>Organization</th><th>Meals</th><th>Staff</th><th>Location</th><th>Contact</th><th>Phone</th></tr></thead><tbody>`;
+                todayDay.allocations.forEach(a => {
+                    todayHtml += `<tr>
+                        <td><strong>${esc(a.orgName)}</strong></td>
+                        <td style="font-weight:600">${a.qty.toLocaleString()}</td>
+                        <td>${esc(a.mediaOfficer || '-')}</td>
+                        <td>${esc(a.location || '-')}</td>
+                        <td>${esc(a.contactPerson || '-')}</td>
+                        <td>${a.contactNumber ? '<a href="tel:' + esc(a.contactNumber) + '">' + esc(a.contactNumber) + '</a>' : '-'}</td>
+                    </tr>`;
+                });
+                todayHtml += `</tbody></table></div>`;
+            } else {
+                todayHtml += `<div style="text-align:center;color:var(--gray-500);padding:16px;font-size:0.88rem">No organizations allocated for today yet.</div>`;
+            }
+
+            if (todayDay.notes) {
+                todayHtml += `<div style="margin-top:10px;padding:10px 14px;background:var(--accent-light);border-radius:8px;font-size:0.85rem"><strong>Notes:</strong> ${esc(todayDay.notes)}</div>`;
+            }
+
+            todayHtml += `<div style="margin-top:12px;text-align:right">
+                <button class="btn btn-sm btn-primary" onclick="openDayModal(${todayDay.day})">Edit Today's Schedule</button>
+            </div></div>`;
+
+            todayContainer.innerHTML = todayHtml;
+        } else {
+            todayContainer.innerHTML = '';
+        }
 
         // Chart
         let chartHtml = '<div style="display:flex;align-items:flex-end;gap:3px;height:120px;padding:10px 0">';
