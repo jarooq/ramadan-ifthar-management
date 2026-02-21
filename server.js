@@ -165,17 +165,24 @@ app.delete('/api/updates/:id', (req, res) => {
     }
 });
 
+process.on('uncaughtException', (err) => {
+    console.error('Uncaught Exception:', err);
+});
+process.on('unhandledRejection', (err) => {
+    console.error('Unhandled Rejection:', err);
+});
+
 app.listen(PORT, '0.0.0.0', () => {
-    console.log('\n  Ifthar Management Server is running!\n');
-    console.log(`  Local:   http://localhost:${PORT}`);
-    const interfaces = os.networkInterfaces();
-    for (const name of Object.keys(interfaces)) {
-        for (const iface of interfaces[name]) {
-            if (iface.family === 'IPv4' && !iface.internal) {
-                console.log(`  Network: http://${iface.address}:${PORT}`);
+    console.log(`\n  Ifthar Management Server running on port ${PORT}\n`);
+    try {
+        const interfaces = os.networkInterfaces();
+        for (const name of Object.keys(interfaces)) {
+            for (const iface of interfaces[name]) {
+                if (iface.family === 'IPv4' && !iface.internal) {
+                    console.log(`  Network: http://${iface.address}:${PORT}`);
+                }
             }
         }
-    }
-    console.log('\n  Share the Network URL with your staff.');
-    console.log('  For remote access: npx ngrok http 3000\n');
+    } catch (e) {}
+    console.log('');
 });
