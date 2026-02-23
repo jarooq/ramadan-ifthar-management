@@ -910,7 +910,14 @@
             <div class="card">
                 <div class="card-title">
                     <span>Expenses Log</span>
-                    <button class="btn btn-sm btn-primary no-print" onclick="printExpenses()">Print</button>
+                    <div style="display:flex;gap:6px;flex-wrap:wrap">
+                        <button class="btn btn-sm no-print" onclick="downloadExpensesExcel()" style="background:var(--success);color:white">Download Excel</button>
+                        <label class="btn btn-sm no-print" style="background:var(--info);color:white;cursor:pointer;margin:0">
+                            Upload Excel
+                            <input type="file" accept=".csv,.xlsx,.xls" onchange="uploadExpensesFile(event)" style="display:none">
+                        </label>
+                        <button class="btn btn-sm btn-primary no-print" onclick="printExpenses()">Print</button>
+                    </div>
                 </div>
                 <div class="table-wrap">
                     <table id="expenses-table">
@@ -3463,6 +3470,201 @@
         </body></html>`);
         w.document.close();
         setTimeout(() => w.print(), 300);
+    }
+
+    function downloadExpensesExcel() {
+        if (!appData) return;
+        // Build CSV with two sheets worth of data:
+        // Sheet 1: Summary per day (same as expenses log table)
+        // Sheet 2: Itemized details
+
+        // --- Summary CSV ---
+        const catHeaders = EXPENSE_FIELDS.map(f => f.label);
+        let csv = '\uFEFF'; // BOM for Excel UTF-8
+        csv += 'EXPENSE SUMMARY\n';
+        csv += ['Day', 'Date', ...catHeaders, 'Total'].map(h => '"' + h + '"').join(',') + '\n';
+
+        const totals = {};
+        EXPENSE_FIELDS.forEach(f => { totals[f.key] = 0; });
+        let grandTotal = 0;
+
+        appData.days.forEach(day => {
+            const exp = day.expenses || {};
+            const dayTotal = getExpenseTotal(exp);
+            if (dayTotal === 0) return;
+            EXPENSE_FIELDS.forEach(f => { totals[f.key] += (exp[f.key] || 0); });
+            grandTotal += dayTotal;
+            csv += [
+                'Day ' + day.day,
+                formatDate(day.date),
+                ...EXPENSE_FIELDS.map(f => exp[f.key] || 0),
+                dayTotal
+            ].map(v => '"' + v + '"').join(',') + '\n';
+        });
+
+        csv += ['TOTAL', '', ...EXPENSE_FIELDS.map(f => totals[f.key]), grandTotal].map(v => '"' + v + '"').join(',') + '\n';
+
+        // --- Itemized Details ---
+        csv += '\n\nITEMIZED EXPENSES\n';
+        csv += ['Day', 'Date', 'Category', 'Item Name', 'Rate', 'Qty', 'Unit', 'Amount'].map(h => '"' + h + '"').join(',') + '\n';
+
+        appData.days.forEach(day => {
+            const items = day.expenseItems || {};
+            EXPENSE_FIELDS.forEach(f => {
+                (items[f.key] || []).forEach(it => {
+                    csv += [
+                        'Day ' + day.day,
+                        formatDate(day.date),
+                        f.label,
+                        it.name || '',
+                        it.rate || '',
+                        it.qty || '',
+                        it.unit || '',
+                        it.amount || 0
+                    ].map(v => '"' + String(v).replace(/"/g, '""') + '"').join(',') + '\n';
+                });
+            });
+        });
+
+        // Download
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = (settings ? settings.orgName : 'Expenses') + '_Expenses_' + new Date().toISOString().split('T')[0] + '.csv';
+        a.click();
+        URL.revokeObjectURL(url);
+    }
+
+    function uploadExpensesFile(event) {
+        const file = event.target.files[0];
+        if (!file) return;
+        event.target.value = ''; // Reset so same file can be re-uploaded
+
+        const reader = new FileReader();
+        reader.onload = function(e) {
+            try {
+                const text = e.target.result;
+                const lines = text.split(/\r?\n/).filter(l => l.trim());
+
+                // Find the ITEMIZED EXPENSES section
+                let startIdx = -1;
+                for (let i = 0; i < lines.length; i++) {
+                    if (lines[i].toUpperCase().includes('ITEMIZED EXPENSES')) {
+                        startIdx = i + 1; // skip header row after this
+                        break;
+                    }
+                }
+
+                // If no itemized section, try parsing as simple format
+                if (startIdx === -1) startIdx = 0;
+
+                // Skip the header row
+                const headerLine = lines[startIdx] || '';
+                if (headerLine.toLowerCase().includes('day') && headerLine.toLowerCase().includes('category')) {
+                    startIdx++;
+                }
+
+                // Build category key lookup
+                const catLabelToKey = {};
+                EXPENSE_FIELDS.forEach(f => { catLabelToKey[f.label.toLowerCase()] = f.key; });
+
+                let imported = 0;
+                const dayMap = {};
+                appData.days.forEach(d => { dayMap[d.day] = d; });
+
+                for (let i = startIdx; i < lines.length; i++) {
+                    const row = parseCSVLine(lines[i]);
+                    if (row.length < 6) continue;
+
+                    // Extract: Day, Date, Category, Item Name, Rate, Qty, Unit, Amount
+                    const dayStr = row[0].replace(/[^0-9]/g, '');
+                    const dayNum = parseInt(dayStr);
+                    if (!dayNum || !dayMap[dayNum]) continue;
+
+                    const catLabel = (row[2] || '').trim().toLowerCase();
+                    const catKey = catLabelToKey[catLabel];
+                    if (!catKey) continue;
+
+                    const name = (row[3] || '').trim();
+                    if (!name) continue;
+
+                    const rate = parseFloat(row[4]) || 0;
+                    const qty = parseFloat(row[5]) || 0;
+                    const unit = (row[6] || '').trim() || 'Kg';
+                    const amount = rate > 0 && qty > 0 ? rate * qty : (parseFloat(row[7]) || 0);
+                    if (amount <= 0 && qty <= 0) continue;
+
+                    const day = dayMap[dayNum];
+                    if (!day.expenseItems) day.expenseItems = { groceries: [], vegetables: [], accessories: [], equipment: [], transportMeals: [], transportStaff: [], distribution: [], staff: [] };
+                    if (!day.expenseItems[catKey]) day.expenseItems[catKey] = [];
+
+                    day.expenseItems[catKey].push({
+                        name,
+                        rate: rate || (amount / (qty || 1)),
+                        qty: qty || 1,
+                        unit,
+                        amount: amount || (rate * qty)
+                    });
+                    imported++;
+                }
+
+                if (imported === 0) {
+                    return alert('No valid expense items found in file.\n\nExpected CSV format:\nDay, Date, Category, Item Name, Rate, Qty, Unit, Amount');
+                }
+
+                // Recalculate category totals for all affected days
+                appData.days.forEach(day => {
+                    if (!day.expenses || typeof day.expenses === 'number') {
+                        day.expenses = { groceries: 0, vegetables: 0, accessories: 0, equipment: 0, transportMeals: 0, transportStaff: 0, distribution: 0, staff: 0 };
+                    }
+                    EXPENSE_FIELDS.forEach(f => {
+                        const catItems = (day.expenseItems || {})[f.key] || [];
+                        day.expenses[f.key] = catItems.reduce((s, it) => s + (it.amount || 0), 0);
+                    });
+                });
+
+                saveData();
+                renderExpenses();
+                renderStock();
+                renderDashboardExpenses();
+
+                alert(`Successfully imported ${imported} expense item(s).`);
+            } catch (err) {
+                alert('Error reading file: ' + err.message);
+            }
+        };
+        reader.readAsText(file);
+    }
+
+    function parseCSVLine(line) {
+        const result = [];
+        let current = '';
+        let inQuotes = false;
+        for (let i = 0; i < line.length; i++) {
+            const ch = line[i];
+            if (inQuotes) {
+                if (ch === '"' && line[i + 1] === '"') {
+                    current += '"';
+                    i++;
+                } else if (ch === '"') {
+                    inQuotes = false;
+                } else {
+                    current += ch;
+                }
+            } else {
+                if (ch === '"') {
+                    inQuotes = true;
+                } else if (ch === ',') {
+                    result.push(current.trim());
+                    current = '';
+                } else {
+                    current += ch;
+                }
+            }
+        }
+        result.push(current.trim());
+        return result;
     }
 
     // ===================== STOCK MANAGEMENT =====================
