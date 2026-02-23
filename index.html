@@ -759,19 +759,59 @@
 
         <!-- EXPENSES -->
         <div class="page" id="page-expenses">
-            <!-- Entry Form -->
+            <!-- Invoice Entry Form -->
             <div class="card">
                 <div class="card-title">
-                    <span>Add / Edit Daily Expense</span>
+                    <span>Expense Invoice</span>
                 </div>
-                <div style="margin-bottom:14px">
-                    <label style="font-size:0.8rem;font-weight:600;color:var(--gray-700);display:block;margin-bottom:4px">Select Day</label>
-                    <select id="expense-day-select" onchange="loadExpenseDay()" style="width:100%;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:6px;font-size:0.9rem"></select>
+                <div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:14px;align-items:flex-end">
+                    <div style="flex:1;min-width:180px">
+                        <label style="font-size:0.8rem;font-weight:600;color:var(--gray-700);display:block;margin-bottom:4px">Select Day</label>
+                        <select id="expense-day-select" onchange="loadExpenseDay()" style="width:100%;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:6px;font-size:0.9rem"></select>
+                    </div>
+                    <div>
+                        <span id="expense-day-existing" style="font-size:0.8rem;color:var(--gray-500)"></span>
+                    </div>
                 </div>
-                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px" id="expense-form-fields"></div>
-                <div style="margin-top:14px;text-align:right">
-                    <span id="expense-day-total" style="font-size:1.1rem;font-weight:700;color:var(--primary)"></span>
+
+                <!-- Invoice Table -->
+                <div class="table-wrap" style="margin-bottom:12px">
+                    <table id="invoice-table" style="width:100%">
+                        <thead><tr style="background:var(--gray-50)">
+                            <th style="width:40px;text-align:center">#</th>
+                            <th style="width:140px">Category</th>
+                            <th>Item Name</th>
+                            <th style="width:110px;text-align:right">Amount</th>
+                            <th style="width:40px"></th>
+                        </tr></thead>
+                        <tbody id="invoice-rows"></tbody>
+                        <tfoot>
+                            <tr>
+                                <td colspan="5" style="padding:8px">
+                                    <button class="btn btn-sm" onclick="addInvoiceRow()" style="background:var(--gray-100);color:var(--gray-700);border:1.5px dashed var(--gray-300);width:100%;padding:8px;font-size:0.85rem">+ Add Item</button>
+                                </td>
+                            </tr>
+                            <tr style="background:var(--gray-50);font-weight:700">
+                                <td colspan="3" style="text-align:right;padding-right:12px">Invoice Total:</td>
+                                <td style="text-align:right;color:var(--primary);font-size:1.1rem" id="invoice-total">0</td>
+                                <td></td>
+                            </tr>
+                        </tfoot>
+                    </table>
                 </div>
+
+                <div style="display:flex;gap:10px;justify-content:flex-end;align-items:center">
+                    <button class="btn btn-sm" onclick="clearInvoice()" style="background:var(--gray-100);color:var(--gray-700)">Clear</button>
+                    <button class="btn btn-primary" onclick="submitExpenseInvoice()" style="padding:10px 28px;font-size:0.95rem;font-weight:600">Submit to Expenses</button>
+                </div>
+            </div>
+
+            <!-- Existing items for selected day -->
+            <div class="card" id="day-expense-detail-card" style="display:none">
+                <div class="card-title">
+                    <span id="day-expense-detail-title">Day Expenses</span>
+                </div>
+                <div id="day-expense-detail-content"></div>
             </div>
 
             <!-- Totals Summary -->
@@ -2838,78 +2878,201 @@
         tbody.innerHTML = rowsHtml;
     }
 
+    let invoiceRows = [];
+
     function loadExpenseDay() {
         const daySel = document.getElementById('expense-day-select');
-        const fieldsEl = document.getElementById('expense-form-fields');
-        if (!daySel || !fieldsEl) return;
+        if (!daySel) return;
 
         const dayNum = parseInt(daySel.value);
         const day = appData.days[dayNum - 1];
         if (!day) return;
-        const exp = day.expenses || {};
         const items = day.expenseItems || {};
+        const exp = day.expenses || {};
+        const dayTotal = getExpenseTotal(exp);
+
+        // Show existing info
+        const existingEl = document.getElementById('expense-day-existing');
+        if (existingEl) {
+            existingEl.textContent = dayTotal > 0 ? `Current total: ${dayTotal.toLocaleString()}` : '';
+        }
+
+        // Show existing items detail card
+        renderDayExpenseDetail(dayNum);
+
+        // Initialize invoice with empty rows if empty
+        if (invoiceRows.length === 0) {
+            invoiceRows = [{ category: 'groceries', name: '', amount: '' }];
+        }
+        renderInvoiceRows();
+    }
+
+    function renderInvoiceRows() {
+        const tbody = document.getElementById('invoice-rows');
+        if (!tbody) return;
+
+        let html = '';
+        invoiceRows.forEach((row, idx) => {
+            html += `<tr>
+                <td style="text-align:center;color:var(--gray-500);font-size:0.85rem">${idx + 1}</td>
+                <td>
+                    <select id="inv-cat-${idx}" onchange="updateInvoiceRow(${idx})" style="width:100%;padding:7px 6px;border:1.5px solid var(--gray-200);border-radius:4px;font-size:0.82rem">
+                        ${EXPENSE_FIELDS.map(f => `<option value="${f.key}" ${row.category === f.key ? 'selected' : ''}>${f.label}</option>`).join('')}
+                    </select>
+                </td>
+                <td>
+                    <input type="text" id="inv-name-${idx}" value="${esc(row.name)}" placeholder="Item name" onchange="updateInvoiceRow(${idx})" style="width:100%;padding:7px 8px;border:1.5px solid var(--gray-200);border-radius:4px;font-size:0.85rem">
+                </td>
+                <td>
+                    <input type="number" id="inv-amt-${idx}" value="${row.amount}" placeholder="0" min="0" onchange="updateInvoiceRow(${idx})" style="width:100%;padding:7px 8px;border:1.5px solid var(--gray-200);border-radius:4px;font-size:0.85rem;text-align:right">
+                </td>
+                <td style="text-align:center">
+                    <button onclick="removeInvoiceRow(${idx})" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:1.1rem;padding:2px 6px" title="Remove">&times;</button>
+                </td>
+            </tr>`;
+        });
+
+        tbody.innerHTML = html;
+        updateInvoiceTotal();
+    }
+
+    function addInvoiceRow() {
+        invoiceRows.push({ category: 'groceries', name: '', amount: '' });
+        renderInvoiceRows();
+        // Focus the new row's name field
+        setTimeout(() => {
+            const nameEl = document.getElementById('inv-name-' + (invoiceRows.length - 1));
+            if (nameEl) nameEl.focus();
+        }, 50);
+    }
+
+    function removeInvoiceRow(idx) {
+        if (invoiceRows.length <= 1) {
+            invoiceRows = [{ category: 'groceries', name: '', amount: '' }];
+        } else {
+            invoiceRows.splice(idx, 1);
+        }
+        renderInvoiceRows();
+    }
+
+    function updateInvoiceRow(idx) {
+        const catEl = document.getElementById('inv-cat-' + idx);
+        const nameEl = document.getElementById('inv-name-' + idx);
+        const amtEl = document.getElementById('inv-amt-' + idx);
+        if (catEl) invoiceRows[idx].category = catEl.value;
+        if (nameEl) invoiceRows[idx].name = nameEl.value;
+        if (amtEl) invoiceRows[idx].amount = amtEl.value;
+        updateInvoiceTotal();
+    }
+
+    function updateInvoiceTotal() {
+        const totalEl = document.getElementById('invoice-total');
+        if (!totalEl) return;
+        let total = 0;
+        invoiceRows.forEach(r => { total += parseFloat(r.amount) || 0; });
+        totalEl.textContent = total.toLocaleString();
+    }
+
+    function clearInvoice() {
+        invoiceRows = [{ category: 'groceries', name: '', amount: '' }];
+        renderInvoiceRows();
+    }
+
+    function submitExpenseInvoice() {
+        const daySel = document.getElementById('expense-day-select');
+        if (!daySel) return;
+        const dayNum = parseInt(daySel.value);
+        const day = appData.days[dayNum - 1];
+        if (!day) return;
+
+        // Validate - at least one valid row
+        const validRows = invoiceRows.filter(r => r.name.trim() && (parseFloat(r.amount) || 0) > 0);
+        if (validRows.length === 0) return alert('Please add at least one item with name and amount.');
+
+        // Ensure data structures exist
+        if (!day.expenseItems) day.expenseItems = { groceries: [], accessories: [], equipment: [], transportMeals: [], transportStaff: [], distribution: [], staff: [] };
+        if (!day.expenses || typeof day.expenses === 'number') {
+            day.expenses = { groceries: 0, accessories: 0, equipment: 0, transportMeals: 0, transportStaff: 0, distribution: 0, staff: 0 };
+        }
+
+        // Add each valid row to the day's expense items
+        validRows.forEach(r => {
+            const cat = r.category;
+            if (!day.expenseItems[cat]) day.expenseItems[cat] = [];
+            day.expenseItems[cat].push({ name: r.name.trim(), amount: parseFloat(r.amount) || 0 });
+        });
+
+        // Recalculate category totals from items
+        EXPENSE_FIELDS.forEach(f => {
+            const catItems = day.expenseItems[f.key] || [];
+            day.expenses[f.key] = catItems.reduce((s, it) => s + (it.amount || 0), 0);
+        });
+
+        saveData();
+
+        // Clear invoice form
+        invoiceRows = [{ category: 'groceries', name: '', amount: '' }];
+        renderInvoiceRows();
+
+        // Refresh all views
+        renderDayExpenseDetail(dayNum);
+        renderExpenseStats();
+        renderExpenseLog();
+        renderDashboardExpenses();
+
+        // Show success feedback
+        const btn = document.querySelector('[onclick="submitExpenseInvoice()"]');
+        if (btn) {
+            const origText = btn.textContent;
+            btn.textContent = 'Submitted!';
+            btn.style.background = 'var(--success)';
+            setTimeout(() => { btn.textContent = origText; btn.style.background = ''; }, 1500);
+        }
+    }
+
+    function renderDayExpenseDetail(dayNum) {
+        const card = document.getElementById('day-expense-detail-card');
+        const titleEl = document.getElementById('day-expense-detail-title');
+        const contentEl = document.getElementById('day-expense-detail-content');
+        if (!card || !contentEl) return;
+
+        const day = appData.days[dayNum - 1];
+        if (!day) { card.style.display = 'none'; return; }
+
+        const items = day.expenseItems || {};
+        const exp = day.expenses || {};
+        const hasItems = EXPENSE_FIELDS.some(f => (items[f.key] || []).length > 0);
+
+        if (!hasItems) { card.style.display = 'none'; return; }
+
+        card.style.display = '';
+        if (titleEl) titleEl.textContent = `Day ${dayNum} - ${formatDate(day.date)} Expenses`;
 
         let html = '';
         EXPENSE_FIELDS.forEach(f => {
             const catItems = items[f.key] || [];
+            if (catItems.length === 0) return;
             const catTotal = catItems.reduce((s, it) => s + (it.amount || 0), 0);
-            html += `<div style="background:white;border:1.5px solid var(--gray-200);border-radius:8px;padding:12px;border-left:4px solid ${f.color}">
-                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
-                    <strong style="font-size:0.85rem;display:flex;align-items:center;gap:6px">${f.label}</strong>
-                    <span style="font-weight:700;font-size:0.95rem;color:var(--primary)" id="cat-total-${f.key}">${catTotal.toLocaleString()}</span>
+
+            html += `<div style="margin-bottom:12px;border-left:3px solid ${f.color};padding-left:10px">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                    <strong style="font-size:0.85rem">${f.label}</strong>
+                    <span style="font-weight:700;color:var(--primary);font-size:0.9rem">${catTotal.toLocaleString()}</span>
                 </div>`;
-
-            // Existing items list
-            if (catItems.length > 0) {
-                html += `<div style="margin-bottom:8px">`;
-                catItems.forEach((it, idx) => {
-                    html += `<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--gray-100);font-size:0.82rem">
-                        <span style="flex:1">${esc(it.name)}</span>
-                        <span style="font-weight:600;min-width:60px;text-align:right">${(it.amount || 0).toLocaleString()}</span>
-                        <button onclick="removeExpenseItem(${dayNum},'${f.key}',${idx})" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:1rem;padding:0 4px">&times;</button>
-                    </div>`;
-                });
-                html += `</div>`;
-            }
-
-            // Add item form
-            html += `<div style="display:flex;gap:6px;align-items:center">
-                <input type="text" id="item-name-${f.key}" placeholder="Item name" style="flex:1;padding:6px 8px;border:1.5px solid var(--gray-200);border-radius:4px;font-size:0.82rem">
-                <input type="number" id="item-amt-${f.key}" placeholder="Amount" min="0" style="width:80px;padding:6px 8px;border:1.5px solid var(--gray-200);border-radius:4px;font-size:0.82rem;text-align:right">
-                <button class="btn btn-sm btn-primary" onclick="addExpenseItem(${dayNum},'${f.key}')" style="padding:6px 10px">+</button>
-            </div>
-            </div>`;
+            catItems.forEach((it, idx) => {
+                html += `<div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:0.82rem;border-bottom:1px solid var(--gray-100)">
+                    <span style="flex:1">${esc(it.name)}</span>
+                    <span style="font-weight:600;min-width:60px;text-align:right">${(it.amount || 0).toLocaleString()}</span>
+                    <button onclick="removeExpenseItem(${dayNum},'${f.key}',${idx})" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:1rem;padding:0 4px" title="Remove">&times;</button>
+                </div>`;
+            });
+            html += `</div>`;
         });
 
-        fieldsEl.innerHTML = html;
-        updateExpenseFormTotal();
-    }
+        const dayTotal = getExpenseTotal(exp);
+        html += `<div style="text-align:right;font-weight:700;font-size:1rem;color:var(--primary);padding-top:8px;border-top:2px solid var(--gray-200)">Day Total: ${dayTotal.toLocaleString()}</div>`;
 
-    function addExpenseItem(dayNum, category) {
-        const day = appData.days[dayNum - 1];
-        if (!day) return;
-        const nameEl = document.getElementById('item-name-' + category);
-        const amtEl = document.getElementById('item-amt-' + category);
-        if (!nameEl || !amtEl) return;
-        const name = nameEl.value.trim();
-        const amount = parseFloat(amtEl.value) || 0;
-        if (!name || amount <= 0) return alert('Enter item name and amount');
-
-        if (!day.expenseItems) day.expenseItems = { groceries: [], accessories: [], equipment: [], transportMeals: [], transportStaff: [], distribution: [], staff: [] };
-        if (!day.expenseItems[category]) day.expenseItems[category] = [];
-        day.expenseItems[category].push({ name, amount });
-
-        // Recalculate category total from items
-        if (!day.expenses || typeof day.expenses === 'number') {
-            day.expenses = { groceries: 0, accessories: 0, equipment: 0, transportMeals: 0, transportStaff: 0, distribution: 0, staff: 0 };
-        }
-        day.expenses[category] = day.expenseItems[category].reduce((s, it) => s + (it.amount || 0), 0);
-
-        saveData();
-        loadExpenseDay();
-        renderExpenseStats();
-        renderExpenseLog();
-        renderDashboardExpenses();
+        contentEl.innerHTML = html;
     }
 
     function removeExpenseItem(dayNum, category, idx) {
@@ -2924,22 +3087,10 @@
         day.expenses[category] = day.expenseItems[category].reduce((s, it) => s + (it.amount || 0), 0);
 
         saveData();
-        loadExpenseDay();
+        renderDayExpenseDetail(dayNum);
         renderExpenseStats();
         renderExpenseLog();
         renderDashboardExpenses();
-    }
-
-    function updateExpenseFormTotal() {
-        const totalEl = document.getElementById('expense-day-total');
-        if (!totalEl) return;
-        const daySel = document.getElementById('expense-day-select');
-        if (!daySel) return;
-        const dayNum = parseInt(daySel.value);
-        const day = appData.days[dayNum - 1];
-        if (!day) return;
-        const total = getExpenseTotal(day.expenses);
-        totalEl.textContent = 'Day Total: ' + total.toLocaleString();
     }
 
     function renderExpenseStats() {
