@@ -326,21 +326,32 @@ async function start() {
         console.log('');
     });
 
-    // Then connect to MongoDB
-    try {
-        console.log('  Connecting to MongoDB...');
-        const client = new MongoClient(MONGODB_URI, {
-            serverSelectionTimeoutMS: 10000,
-            connectTimeoutMS: 10000
-        });
-        await client.connect();
-        db = client.db();
-        console.log('  MongoDB connected successfully!\n');
-    } catch (e) {
-        console.error('  Failed to connect to MongoDB:', e.message);
-        console.error('  Set MONGODB_URI environment variable with your MongoDB Atlas connection string');
-        console.error('  Server running but database unavailable - API calls will return null');
+    // Then connect to MongoDB with retry
+    connectMongo();
+}
+
+async function connectMongo(retries = 5) {
+    for (let i = 1; i <= retries; i++) {
+        try {
+            console.log(`  Connecting to MongoDB (attempt ${i}/${retries})...`);
+            console.log('  URI:', MONGODB_URI ? MONGODB_URI.replace(/\/\/[^@]+@/, '//***:***@') : 'NOT SET');
+            const client = new MongoClient(MONGODB_URI, {
+                serverSelectionTimeoutMS: 15000,
+                connectTimeoutMS: 15000
+            });
+            await client.connect();
+            db = client.db();
+            console.log('  MongoDB connected successfully!\n');
+            return;
+        } catch (e) {
+            console.error(`  MongoDB connection attempt ${i} failed:`, e.message);
+            if (i < retries) {
+                console.log(`  Retrying in 5 seconds...`);
+                await new Promise(r => setTimeout(r, 5000));
+            }
+        }
     }
+    console.error('  All MongoDB connection attempts failed. API calls will return null.');
 }
 
 start();
