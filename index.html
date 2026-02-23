@@ -1289,16 +1289,30 @@
 
     async function initFromServer() {
         const serverSettings = await fetchFromServer('/api/settings');
+        const serverData = await fetchFromServer('/api/data');
+
+        // Server has data → use it (new device scenario)
         if (serverSettings) {
             settings = serverSettings;
             localStorage.setItem('ifthar_settings', JSON.stringify(settings));
         }
-        const serverData = await fetchFromServer('/api/data');
-        if (serverData && serverData.days) {
+        if (serverData && serverData.days && serverData.days.length > 0) {
             migrateData(serverData);
             appData = serverData;
             localStorage.setItem('ifthar_app_data', JSON.stringify(appData));
             _lastDataHash = JSON.stringify(appData);
+        }
+
+        // Local has data but server doesn't → push local to server (server lost data after redeploy)
+        if (!serverSettings && settings) {
+            syncToServer('/api/settings', settings);
+        }
+        if ((!serverData || !serverData.days || serverData.days.length === 0) && appData && appData.days && appData.days.length > 0) {
+            const hasRealData = appData.days.some(d => d.allocations.length > 0 || d.status !== 'pending' || getExpenseTotal(d.expenses) > 0);
+            if (hasRealData) {
+                syncToServer('/api/data', appData);
+                _lastDataHash = JSON.stringify(appData);
+            }
         }
     }
 
