@@ -551,6 +551,7 @@
         <div class="nav-tab" data-page="schedule">Daily Schedule</div>
         <div class="nav-tab" data-page="distribution">Distribution Log</div>
         <div class="nav-tab" data-page="reports">Reports</div>
+        <div class="nav-tab" data-page="expenses">Expenses</div>
         <div class="nav-tab" data-page="updates">Updates</div>
         <div class="nav-tab" data-page="live-display">Live Display</div>
         <div class="nav-tab" data-page="settings">Settings</div>
@@ -744,6 +745,28 @@
                     <button class="btn btn-sm btn-primary no-print" onclick="printReport()">Print Report</button>
                 </div>
                 <div id="report-content"></div>
+            </div>
+        </div>
+
+        <!-- EXPENSES -->
+        <div class="page" id="page-expenses">
+            <div class="stats-grid" id="expenses-stats"></div>
+            <div class="card">
+                <div class="card-title">
+                    <span>Daily Expenses Breakdown</span>
+                    <button class="btn btn-sm btn-primary no-print" onclick="printExpenses()">Print Expenses</button>
+                </div>
+                <div class="table-wrap">
+                    <table id="expenses-table">
+                        <thead><tr>
+                            <th>Day</th><th>Date</th>
+                            <th>Groceries</th><th>Accessories</th><th>Equipment</th>
+                            <th>Transport (Meals)</th><th>Transport (Staff)</th>
+                            <th>Distribution</th><th>Staff</th><th>Total</th>
+                        </tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
             </div>
         </div>
 
@@ -970,7 +993,14 @@
             if (d.actualDistributed === undefined) d.actualDistributed = 0;
             if (d.notes === undefined) d.notes = '';
             if (d.mediaLink === undefined) d.mediaLink = '';
-            if (d.expenses === undefined) d.expenses = 0;
+            const defaultExp = { groceries: 0, accessories: 0, equipment: 0, transportMeals: 0, transportStaff: 0, distribution: 0, staff: 0 };
+            if (d.expenses === undefined || d.expenses === null) {
+                d.expenses = defaultExp;
+            } else if (typeof d.expenses === 'number') {
+                d.expenses = Object.assign({}, defaultExp, { groceries: d.expenses });
+            } else {
+                Object.keys(defaultExp).forEach(k => { if (d.expenses[k] === undefined) d.expenses[k] = 0; });
+            }
             if (!d.checklist) d.checklist = { ingredients: false, cooking: false, qualityCheck: false, packing: false, transport: false, distributed: false, cleanup: false, reported: false };
             if (d.status === undefined) d.status = 'pending';
             (d.allocations || []).forEach(a => {
@@ -1051,7 +1081,7 @@
                 actualDistributed: 0,
                 notes: '',
                 mediaLink: '',
-                expenses: 0,
+                expenses: { groceries: 0, accessories: 0, equipment: 0, transportMeals: 0, transportStaff: 0, distribution: 0, staff: 0 },
                 checklist: { ingredients: false, cooking: false, qualityCheck: false, packing: false, transport: false, distributed: false, cleanup: false, reported: false },
                 locked: false
             });
@@ -1908,8 +1938,11 @@
                 <div class="form-group"><label>Notes</label>
                     <textarea id="modal-notes" rows="2" placeholder="Notes...">${esc(day.notes)}</textarea>
                 </div>
-                <div class="form-group"><label>Expenses (Cost)</label>
-                    <input type="number" id="modal-expenses" value="${day.expenses || 0}" min="0" placeholder="0">
+                <div class="form-group"><label>Expenses</label>
+                    <div style="padding:9px 12px;background:white;border:1.5px solid var(--gray-200);border-radius:6px;font-size:0.9rem;display:flex;justify-content:space-between;align-items:center">
+                        <span style="font-weight:600">${getExpenseTotal(day.expenses).toLocaleString()}</span>
+                        <a href="#" onclick="event.preventDefault();closeModal();document.querySelector('[data-page=expenses]').click()" style="font-size:0.75rem;color:var(--primary)">Edit Details</a>
+                    </div>
                 </div>
             </div>
             <div class="form-group" style="margin-top:8px"><label>Media Link</label>
@@ -1997,8 +2030,6 @@
         if (distEl) day.actualDistributed = parseInt(distEl.value) || 0;
         if (notesEl) day.notes = notesEl.value.trim();
         if (mediaEl) day.mediaLink = mediaEl.value.trim();
-        const expEl = document.getElementById('modal-expenses');
-        if (expEl) day.expenses = parseFloat(expEl.value) || 0;
         document.querySelectorAll('.day-checklist').forEach(el => { day.checklist[el.dataset.key] = el.checked; });
         day.status = status;
         day.locked = true;
@@ -2030,7 +2061,6 @@
         day.actualDistributed = parseInt(document.getElementById('modal-distributed').value) || 0;
         day.notes = document.getElementById('modal-notes').value.trim();
         day.mediaLink = (document.getElementById('modal-medialink').value || '').trim();
-        day.expenses = parseFloat(document.getElementById('modal-expenses').value) || 0;
         document.querySelectorAll('.day-checklist').forEach(el => { day.checklist[el.dataset.key] = el.checked; });
         day.locked = true;
         saveData();
@@ -2068,7 +2098,11 @@
 
         if (day.actualCooked > 0) msg += `\nCooked: ${day.actualCooked.toLocaleString()}`;
         if (day.actualDistributed > 0) msg += `\nDistributed: ${day.actualDistributed.toLocaleString()}`;
-        if (day.expenses > 0) msg += `\nExpenses: ${day.expenses.toLocaleString()}`;
+        const dayExpTotal = getExpenseTotal(day.expenses);
+        if (dayExpTotal > 0) {
+            msg += `\nExpenses: ${dayExpTotal.toLocaleString()}`;
+            EXPENSE_FIELDS.forEach(f => { if (day.expenses[f.key] > 0) msg += `\n  ${f.label}: ${day.expenses[f.key].toLocaleString()}`; });
+        }
         if (day.notes) msg += `\n\n_Notes: ${day.notes}_`;
         if (day.mediaLink) msg += `\n\nMedia: ${day.mediaLink}`;
 
@@ -2448,8 +2482,16 @@
         const totalCapacity = cap * totalDays;
         const totalCooked = appData.days.reduce((s, d) => s + d.actualCooked, 0);
         const totalDistributed = appData.days.reduce((s, d) => s + d.actualDistributed, 0);
-        const totalExpenses = appData.days.reduce((s, d) => s + (d.expenses || 0), 0);
+        const totalExpenses = appData.days.reduce((s, d) => s + getExpenseTotal(d.expenses), 0);
         const daysCompleted = appData.days.filter(d => d.status === 'distributed' || d.status === 'reported').length;
+
+        // Expense breakdown for reports
+        const expBreakdown = {};
+        EXPENSE_FIELDS.forEach(f => { expBreakdown[f.key] = 0; });
+        appData.days.forEach(d => {
+            const exp = d.expenses || {};
+            EXPENSE_FIELDS.forEach(f => { expBreakdown[f.key] += (typeof exp === 'object' ? (exp[f.key] || 0) : 0); });
+        });
 
         let html = `<table style="margin-bottom:20px">
             <tr><td style="font-weight:600;padding:8px 16px 8px 0">Organization</td><td>${esc(settings.orgName)}</td></tr>
@@ -2458,7 +2500,7 @@
             <tr><td style="font-weight:600;padding:8px 16px 8px 0">Total Received</td><td>${totalReceived.toLocaleString()} meals</td></tr>
             <tr><td style="font-weight:600;padding:8px 16px 8px 0">Total Cooked</td><td>${totalCooked.toLocaleString()} meals</td></tr>
             <tr><td style="font-weight:600;padding:8px 16px 8px 0">Total Distributed</td><td>${totalDistributed.toLocaleString()} meals</td></tr>
-            ${totalExpenses > 0 ? `<tr><td style="font-weight:600;padding:8px 16px 8px 0">Total Expenses</td><td>${totalExpenses.toLocaleString()}</td></tr>` : ''}
+            ${totalExpenses > 0 ? `<tr><td style="font-weight:600;padding:8px 16px 8px 0">Total Expenses</td><td>${totalExpenses.toLocaleString()}</td></tr>` + EXPENSE_FIELDS.filter(f => expBreakdown[f.key] > 0).map(f => `<tr><td style="font-weight:500;padding:4px 16px 4px 24px;font-size:0.82rem;color:var(--gray-500)">${f.label}</td><td style="font-size:0.82rem">${expBreakdown[f.key].toLocaleString()}</td></tr>`).join('') : ''}
             <tr><td style="font-weight:600;padding:8px 16px 8px 0">Days Completed</td><td>${daysCompleted} / ${totalDays}</td></tr>
             <tr><td style="font-weight:600;padding:8px 16px 8px 0">Coverage</td><td>${totalCapacity > 0 ? ((totalReceived / totalCapacity) * 100).toFixed(1) : 0}%</td></tr>
         </table>
@@ -2523,7 +2565,7 @@
         const cap = settings.dailyCapacity;
         const daysWithOrg = appData.days.filter(d => d.allocations.some(a => a.orgId === orgId));
         const totalPlanned = daysWithOrg.reduce((s, d) => s + d.allocations.filter(a => a.orgId === orgId).reduce((ss, a) => ss + a.qty, 0), 0);
-        const totalExpenses = daysWithOrg.reduce((s, d) => s + (d.expenses || 0), 0);
+        const totalExpenses = daysWithOrg.reduce((s, d) => s + getExpenseTotal(d.expenses), 0);
         const completedDays = daysWithOrg.filter(d => d.status === 'distributed' || d.status === 'reported');
         const totalCooked = completedDays.reduce((s, d) => s + d.actualCooked, 0);
         const totalDistributed = completedDays.reduce((s, d) => s + d.actualDistributed, 0);
@@ -2605,6 +2647,153 @@
     function shareDonorReportWhatsApp() {
         if (!_lastDonorReport) return alert('Generate a report first');
         window.open('https://wa.me/?text=' + encodeURIComponent(_lastDonorReport), '_blank');
+    }
+
+    // ===================== EXPENSES PAGE =====================
+    const EXPENSE_FIELDS = [
+        { key: 'groceries', label: 'Groceries', color: 'var(--success)' },
+        { key: 'accessories', label: 'Accessories', color: 'var(--info)' },
+        { key: 'equipment', label: 'Equipment', color: 'var(--warning)' },
+        { key: 'transportMeals', label: 'Transport (Meals)', color: '#e65100' },
+        { key: 'transportStaff', label: 'Transport (Staff)', color: '#7b1fa2' },
+        { key: 'distribution', label: 'Distribution', color: 'var(--primary)' },
+        { key: 'staff', label: 'Staff', color: 'var(--danger)' }
+    ];
+
+    function getExpenseTotal(exp) {
+        if (!exp || typeof exp === 'number') return exp || 0;
+        return EXPENSE_FIELDS.reduce((s, f) => s + (exp[f.key] || 0), 0);
+    }
+
+    function renderExpenses() {
+        if (!settings || !appData) return;
+        const statsEl = document.getElementById('expenses-stats');
+        const tbody = document.querySelector('#expenses-table tbody');
+        if (!statsEl || !tbody) return;
+
+        // Calculate totals per category
+        const totals = {};
+        EXPENSE_FIELDS.forEach(f => { totals[f.key] = 0; });
+        let grandTotal = 0;
+
+        appData.days.forEach(day => {
+            const exp = day.expenses || {};
+            EXPENSE_FIELDS.forEach(f => {
+                totals[f.key] += (exp[f.key] || 0);
+            });
+            grandTotal += getExpenseTotal(exp);
+        });
+
+        // Stat cards
+        statsEl.innerHTML = `<div class="stat-card success">
+                <div class="stat-label">Grand Total</div>
+                <div class="stat-value">${grandTotal.toLocaleString()}</div>
+                <div class="stat-sub">All categories combined</div>
+            </div>` +
+            EXPENSE_FIELDS.map(f => `<div class="stat-card" style="border-left-color:${f.color}">
+                <div class="stat-label">${f.label}</div>
+                <div class="stat-value">${totals[f.key].toLocaleString()}</div>
+                <div class="stat-sub">${grandTotal > 0 ? ((totals[f.key] / grandTotal) * 100).toFixed(1) : 0}%</div>
+            </div>`).join('');
+
+        // Table rows
+        let rowsHtml = '';
+        appData.days.forEach(day => {
+            const exp = day.expenses || {};
+            const dayTotal = getExpenseTotal(exp);
+            rowsHtml += `<tr>
+                <td style="font-weight:600;white-space:nowrap">Day ${day.day}</td>
+                <td style="white-space:nowrap;font-size:0.8rem">${formatDate(day.date)}</td>
+                ${EXPENSE_FIELDS.map(f => `<td><input type="number" value="${exp[f.key] || 0}" min="0" style="width:80px;padding:4px 6px;border:1.5px solid var(--gray-200);border-radius:4px;font-size:0.82rem;text-align:right" onchange="saveExpenseField(${day.day},'${f.key}',this.value)"></td>`).join('')}
+                <td style="font-weight:700;text-align:right">${dayTotal.toLocaleString()}</td>
+            </tr>`;
+        });
+
+        // Grand total row
+        rowsHtml += `<tr style="background:var(--gray-50);font-weight:700">
+            <td colspan="2">TOTAL</td>
+            ${EXPENSE_FIELDS.map(f => `<td style="text-align:right">${totals[f.key].toLocaleString()}</td>`).join('')}
+            <td style="text-align:right;color:var(--primary);font-size:1rem">${grandTotal.toLocaleString()}</td>
+        </tr>`;
+
+        tbody.innerHTML = rowsHtml;
+    }
+
+    function saveExpenseField(dayNum, field, value) {
+        const day = appData.days[dayNum - 1];
+        if (!day) return;
+        if (!day.expenses || typeof day.expenses === 'number') {
+            day.expenses = { groceries: 0, accessories: 0, equipment: 0, transportMeals: 0, transportStaff: 0, distribution: 0, staff: 0 };
+        }
+        day.expenses[field] = parseFloat(value) || 0;
+        saveData();
+        // Only update stat cards to avoid losing input focus
+        const statsEl = document.getElementById('expenses-stats');
+        if (statsEl) {
+            const totals = {};
+            EXPENSE_FIELDS.forEach(f => { totals[f.key] = 0; });
+            let grandTotal = 0;
+            appData.days.forEach(d => {
+                const exp = d.expenses || {};
+                EXPENSE_FIELDS.forEach(f => { totals[f.key] += (exp[f.key] || 0); });
+                grandTotal += getExpenseTotal(exp);
+            });
+            statsEl.innerHTML = `<div class="stat-card success">
+                    <div class="stat-label">Grand Total</div>
+                    <div class="stat-value">${grandTotal.toLocaleString()}</div>
+                    <div class="stat-sub">All categories combined</div>
+                </div>` +
+                EXPENSE_FIELDS.map(f => `<div class="stat-card" style="border-left-color:${f.color}">
+                    <div class="stat-label">${f.label}</div>
+                    <div class="stat-value">${totals[f.key].toLocaleString()}</div>
+                    <div class="stat-sub">${grandTotal > 0 ? ((totals[f.key] / grandTotal) * 100).toFixed(1) : 0}%</div>
+                </div>`).join('');
+        }
+        // Update row total
+        const row = document.querySelector(`#expenses-table tbody tr:nth-child(${dayNum})`);
+        if (row) {
+            const lastTd = row.querySelector('td:last-child');
+            if (lastTd) lastTd.textContent = getExpenseTotal(appData.days[dayNum - 1].expenses).toLocaleString();
+        }
+        // Update grand total row
+        const rows = document.querySelectorAll('#expenses-table tbody tr');
+        const lastRow = rows[rows.length - 1];
+        if (lastRow) {
+            let grandTotal = 0;
+            appData.days.forEach(d => { grandTotal += getExpenseTotal(d.expenses); });
+            const cells = lastRow.querySelectorAll('td');
+            EXPENSE_FIELDS.forEach((f, i) => {
+                let t = 0;
+                appData.days.forEach(d => { t += (d.expenses && d.expenses[f.key]) || 0; });
+                cells[i + 1].textContent = t.toLocaleString();
+            });
+            cells[cells.length - 1].textContent = grandTotal.toLocaleString();
+        }
+    }
+
+    function printExpenses() {
+        if (!settings || !appData) return;
+        const table = document.getElementById('expenses-table');
+        if (!table) return;
+        const w = window.open('', '_blank');
+        w.document.write(`<!DOCTYPE html><html><head><style>
+            body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 20px; }
+            h2 { text-align: center; margin-bottom: 4px; }
+            p { text-align: center; color: #666; font-size: 0.85rem; margin-bottom: 16px; }
+            table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+            th { background: #f5f5f5; font-size: 0.7rem; text-transform: uppercase; padding: 8px 6px; border-bottom: 2px solid #ddd; text-align: right; }
+            th:first-child, th:nth-child(2) { text-align: left; }
+            td { padding: 6px; border-bottom: 1px solid #eee; text-align: right; }
+            td:first-child, td:nth-child(2) { text-align: left; }
+            tr:last-child { font-weight: 700; background: #f9f9f9; }
+            input { border: none; background: transparent; text-align: right; font-size: 0.8rem; width: 70px; }
+        </style></head><body>
+        <h2>${esc(settings.orgName)} - Expenses Report</h2>
+        <p>Generated: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+        ${table.outerHTML}
+        </body></html>`);
+        w.document.close();
+        setTimeout(() => w.print(), 300);
     }
 
     // ===================== UPDATES =====================
@@ -3292,6 +3481,7 @@
         renderSchedule();
         renderDistribution();
         renderReports();
+        renderExpenses();
         renderUpdates();
         renderLiveDisplay();
         const settingsPage = document.getElementById('page-settings');
