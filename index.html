@@ -1719,15 +1719,18 @@
 
         const total = day.allocations.reduce((s, a) => s + a.qty, 0);
         const remaining = cap - total;
+        const maxExtra = 100;
+        const overCap = total - cap;
 
         let html = `<div style="margin-bottom:14px">
             <div style="display:flex;justify-content:space-between;font-size:0.85rem;margin-bottom:4px">
                 <span>Allocated: <strong>${total.toLocaleString()}</strong> / ${cap.toLocaleString()}</span>
-                <span>Remaining: <strong style="color:${remaining > 0 ? 'var(--danger)' : 'var(--success)'}">${remaining.toLocaleString()}</strong></span>
+                <span>Remaining: <strong style="color:${remaining > 0 ? 'var(--danger)' : 'var(--success)'}">${remaining > 0 ? remaining.toLocaleString() : 'Full'}</strong></span>
             </div>
             <div class="progress-bar" style="height:12px">
                 <div class="progress-fill ${total >= cap ? 'green' : total >= cap/2 ? 'yellow' : 'red'}" style="width:${cap > 0 ? Math.min(Math.round(total/cap*100),100) : 0}%"></div>
             </div>
+            ${overCap > 0 ? `<div style="margin-top:6px;padding:6px 10px;background:var(--warning-light);border-radius:6px;font-size:0.8rem;color:#946b00;font-weight:600">Additional ${overCap.toLocaleString()} meals needed (max extra: ${maxExtra})</div>` : ''}
         </div>`;
 
         if (day.allocations.length > 0) {
@@ -1748,15 +1751,17 @@
         }
 
         const unallocatedOrgs = appData.organizations.filter(o => !day.allocations.find(a => a.orgId === o.id));
-        if (unallocatedOrgs.length > 0 && remaining > 0) {
+        const maxAllowed = cap + maxExtra;
+        const canAdd = maxAllowed - total;
+        if (unallocatedOrgs.length > 0 && canAdd > 0) {
             html += `<div style="margin-bottom:14px;padding:12px;background:var(--gray-50);border-radius:8px">
                 <strong style="font-size:0.85rem">Add Allocation:</strong>
                 <div class="form-row" style="margin-top:8px">
                     <div class="form-group"><label>Organization</label>
                         <select id="modal-alloc-org">${unallocatedOrgs.map(o => `<option value="${o.id}">${esc(o.name)}</option>`).join('')}</select>
                     </div>
-                    <div class="form-group"><label>Meals (max ${remaining.toLocaleString()})</label>
-                        <input type="number" id="modal-alloc-qty" max="${remaining}" min="1" value="${Math.min(remaining, unallocatedOrgs[0]?.minPerDay || 100)}">
+                    <div class="form-group"><label>Meals (max ${canAdd.toLocaleString()})</label>
+                        <input type="number" id="modal-alloc-qty" max="${canAdd}" min="1" value="${Math.min(canAdd, unallocatedOrgs[0]?.minPerDay || 100)}">
                     </div>
                     <div class="form-group" style="display:flex;align-items:flex-end">
                         <button class="btn btn-primary btn-sm" onclick="addDayAlloc(${dayNum})">Add</button>
@@ -1826,13 +1831,17 @@
     function addDayAlloc(dayNum) {
         if (!settings) return;
         const day = appData.days[dayNum - 1];
-        saveAllocInputs(dayNum);  // Preserve existing input values
+        saveAllocInputs(dayNum);
         const orgId = document.getElementById('modal-alloc-org').value;
         const qty = parseInt(document.getElementById('modal-alloc-qty').value) || 0;
         const org = appData.organizations.find(o => o.id === orgId);
         if (!org || qty <= 0) return alert('Invalid allocation');
         const total = day.allocations.reduce((s, a) => s + a.qty, 0);
-        if (total + qty > settings.dailyCapacity) return alert(`Exceeds daily capacity. Max: ${settings.dailyCapacity - total}`);
+        const maxAllowed = settings.dailyCapacity + 100;
+        if (total + qty > maxAllowed) return alert(`Exceeds maximum limit (${maxAllowed.toLocaleString()}). Max you can add: ${(maxAllowed - total).toLocaleString()}`);
+        if (total + qty > settings.dailyCapacity) {
+            if (!confirm(`This will exceed daily capacity by ${(total + qty - settings.dailyCapacity).toLocaleString()} meals. Additional arrangements needed. Continue?`)) return;
+        }
         day.allocations.push({ orgId: org.id, orgName: org.name, qty, mediaOfficer: '', location: '', contactPerson: '', contactNumber: '' });
         day.locked = true;
         saveData(); runScheduler(); openDayModal(dayNum); renderDaysGrid();
