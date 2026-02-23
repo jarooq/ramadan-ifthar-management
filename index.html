@@ -552,6 +552,7 @@
         <div class="nav-tab" data-page="distribution">Distribution Log</div>
         <div class="nav-tab" data-page="reports">Reports</div>
         <div class="nav-tab" data-page="expenses">Expenses</div>
+        <div class="nav-tab" data-page="stock">Stock</div>
         <div class="nav-tab" data-page="updates">Updates</div>
         <div class="nav-tab" data-page="live-display">Live Display</div>
         <div class="nav-tab" data-page="settings">Settings</div>
@@ -829,9 +830,102 @@
                     <table id="expenses-table">
                         <thead><tr>
                             <th>Day</th><th>Date</th>
-                            <th>Groceries</th><th>Accessories</th><th>Equipment</th>
+                            <th>Groceries</th><th>Vegetables</th><th>Accessories</th><th>Equipment</th>
                             <th>Transport (Meals)</th><th>Transport (Staff)</th>
                             <th>Distribution</th><th>Staff</th><th>Total</th>
+                        </tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- STOCK MANAGEMENT -->
+        <div class="page" id="page-stock">
+            <!-- Stock Summary Cards -->
+            <div class="stats-grid" id="stock-stats"></div>
+
+            <!-- Issue from Stock -->
+            <div class="card">
+                <div class="card-title"><span>Issue from Stock</span></div>
+                <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
+                    <div>
+                        <label style="font-size:0.78rem;font-weight:600;color:var(--gray-700);display:block;margin-bottom:3px">Category</label>
+                        <select id="stock-issue-cat" onchange="updateStockItemDropdown()" style="width:100%;padding:9px 10px;border:1.5px solid var(--gray-200);border-radius:6px;font-size:0.88rem">
+                            <option value="groceries">Groceries</option>
+                            <option value="vegetables">Vegetables</option>
+                            <option value="accessories">Accessories</option>
+                            <option value="equipment">Equipment</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label style="font-size:0.78rem;font-weight:600;color:var(--gray-700);display:block;margin-bottom:3px">Item</label>
+                        <select id="stock-issue-item" style="width:100%;padding:9px 10px;border:1.5px solid var(--gray-200);border-radius:6px;font-size:0.88rem"></select>
+                    </div>
+                </div>
+                <div style="display:grid;grid-template-columns:1fr 1fr 2fr;gap:10px;margin-bottom:12px">
+                    <div>
+                        <label style="font-size:0.78rem;font-weight:600;color:var(--gray-700);display:block;margin-bottom:3px">Quantity</label>
+                        <input type="number" id="stock-issue-qty" min="1" placeholder="0" style="width:100%;padding:9px 10px;border:1.5px solid var(--gray-200);border-radius:6px;font-size:0.88rem">
+                    </div>
+                    <div>
+                        <label style="font-size:0.78rem;font-weight:600;color:var(--gray-700);display:block;margin-bottom:3px">Issued To</label>
+                        <input type="text" id="stock-issue-to" value="Kitchen" placeholder="Kitchen" style="width:100%;padding:9px 10px;border:1.5px solid var(--gray-200);border-radius:6px;font-size:0.88rem">
+                    </div>
+                    <div>
+                        <label style="font-size:0.78rem;font-weight:600;color:var(--gray-700);display:block;margin-bottom:3px">Note</label>
+                        <input type="text" id="stock-issue-note" placeholder="Optional note" style="width:100%;padding:9px 10px;border:1.5px solid var(--gray-200);border-radius:6px;font-size:0.88rem">
+                    </div>
+                </div>
+                <div style="text-align:right">
+                    <button class="btn btn-primary" onclick="issueStock()" style="padding:10px 24px;font-size:0.9rem;font-weight:600">Issue Stock</button>
+                </div>
+            </div>
+
+            <!-- Stock Inventory Table -->
+            <div class="card">
+                <div class="card-title">
+                    <span>Stock Inventory</span>
+                    <button class="btn btn-sm btn-primary no-print" onclick="printStock()">Print</button>
+                </div>
+                <div style="margin-bottom:10px">
+                    <select id="stock-filter-cat" onchange="renderStockTable()" style="padding:7px 10px;border:1.5px solid var(--gray-200);border-radius:6px;font-size:0.85rem">
+                        <option value="all">All Categories</option>
+                        <option value="groceries">Groceries</option>
+                        <option value="vegetables">Vegetables</option>
+                        <option value="accessories">Accessories</option>
+                        <option value="equipment">Equipment</option>
+                    </select>
+                </div>
+                <div class="table-wrap">
+                    <table id="stock-table">
+                        <thead><tr>
+                            <th>#</th>
+                            <th>Item</th>
+                            <th>Category</th>
+                            <th style="text-align:right">Received</th>
+                            <th style="text-align:right">Issued</th>
+                            <th style="text-align:right">Balance</th>
+                            <th>Status</th>
+                        </tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Issue History -->
+            <div class="card">
+                <div class="card-title"><span>Issue History</span></div>
+                <div class="table-wrap">
+                    <table id="stock-history-table">
+                        <thead><tr>
+                            <th>Date</th>
+                            <th>Item</th>
+                            <th>Category</th>
+                            <th style="text-align:right">Qty</th>
+                            <th>Issued To</th>
+                            <th>Note</th>
+                            <th style="width:40px"></th>
                         </tr></thead>
                         <tbody></tbody>
                     </table>
@@ -1062,7 +1156,7 @@
             if (d.actualDistributed === undefined) d.actualDistributed = 0;
             if (d.notes === undefined) d.notes = '';
             if (d.mediaLink === undefined) d.mediaLink = '';
-            const defaultExp = { groceries: 0, accessories: 0, equipment: 0, transportMeals: 0, transportStaff: 0, distribution: 0, staff: 0 };
+            const defaultExp = { groceries: 0, vegetables: 0, accessories: 0, equipment: 0, transportMeals: 0, transportStaff: 0, distribution: 0, staff: 0 };
             if (d.expenses === undefined || d.expenses === null) {
                 d.expenses = defaultExp;
             } else if (typeof d.expenses === 'number') {
@@ -1070,8 +1164,8 @@
             } else {
                 Object.keys(defaultExp).forEach(k => { if (d.expenses[k] === undefined) d.expenses[k] = 0; });
             }
-            if (!d.expenseItems) d.expenseItems = { groceries: [], accessories: [], equipment: [], transportMeals: [], transportStaff: [], distribution: [], staff: [] };
-            else { ['groceries','accessories','equipment','transportMeals','transportStaff','distribution','staff'].forEach(k => { if (!d.expenseItems[k]) d.expenseItems[k] = []; }); }
+            if (!d.expenseItems) d.expenseItems = { groceries: [], vegetables: [], accessories: [], equipment: [], transportMeals: [], transportStaff: [], distribution: [], staff: [] };
+            else { ['groceries','vegetables','accessories','equipment','transportMeals','transportStaff','distribution','staff'].forEach(k => { if (!d.expenseItems[k]) d.expenseItems[k] = []; }); }
             if (!d.checklist) d.checklist = { ingredients: false, cooking: false, qualityCheck: false, packing: false, transport: false, distributed: false, cleanup: false, reported: false };
             if (d.status === undefined) d.status = 'pending';
             (d.allocations || []).forEach(a => {
@@ -1081,6 +1175,7 @@
                 if (a.contactNumber === undefined) a.contactNumber = '';
             });
         });
+        if (!data.stockIssued) data.stockIssued = [];
         return data;
     }
 
@@ -1152,13 +1247,13 @@
                 actualDistributed: 0,
                 notes: '',
                 mediaLink: '',
-                expenses: { groceries: 0, accessories: 0, equipment: 0, transportMeals: 0, transportStaff: 0, distribution: 0, staff: 0 },
-                expenseItems: { groceries: [], accessories: [], equipment: [], transportMeals: [], transportStaff: [], distribution: [], staff: [] },
+                expenses: { groceries: 0, vegetables: 0, accessories: 0, equipment: 0, transportMeals: 0, transportStaff: 0, distribution: 0, staff: 0 },
+                expenseItems: { groceries: [], vegetables: [], accessories: [], equipment: [], transportMeals: [], transportStaff: [], distribution: [], staff: [] },
                 checklist: { ingredients: false, cooking: false, qualityCheck: false, packing: false, transport: false, distributed: false, cleanup: false, reported: false },
                 locked: false
             });
         }
-        return { organizations: [], days, version: 2 };
+        return { organizations: [], days, stockIssued: [], version: 2 };
     }
 
     function loadData() {
@@ -2797,6 +2892,7 @@
     // ===================== EXPENSES PAGE =====================
     const EXPENSE_FIELDS = [
         { key: 'groceries', label: 'Groceries', color: 'var(--success)' },
+        { key: 'vegetables', label: 'Vegetables', color: '#2e7d32' },
         { key: 'accessories', label: 'Accessories', color: 'var(--info)' },
         { key: 'equipment', label: 'Equipment', color: 'var(--warning)' },
         { key: 'transportMeals', label: 'Transport (Meals)', color: '#e65100' },
@@ -2804,6 +2900,7 @@
         { key: 'distribution', label: 'Distribution', color: 'var(--primary)' },
         { key: 'staff', label: 'Staff', color: 'var(--danger)' }
     ];
+    const STOCK_CATEGORIES = ['groceries', 'vegetables', 'accessories', 'equipment'];
 
     function getExpenseTotal(exp) {
         if (!exp || typeof exp === 'number') return exp || 0;
@@ -2882,12 +2979,12 @@
                     detailHtml += `</div>`;
                 });
                 detailHtml += '</div>';
-                rowsHtml += `<tr><td colspan="10" style="padding:4px 12px 8px;background:var(--gray-50);border-bottom:2px solid var(--gray-200)">${detailHtml}</td></tr>`;
+                rowsHtml += `<tr><td colspan="11" style="padding:4px 12px 8px;background:var(--gray-50);border-bottom:2px solid var(--gray-200)">${detailHtml}</td></tr>`;
             }
         });
 
         if (rowsHtml === '') {
-            rowsHtml = '<tr><td colspan="10" style="text-align:center;color:var(--gray-500);padding:20px">No expenses recorded yet. Use the form above to add daily expenses.</td></tr>';
+            rowsHtml = '<tr><td colspan="11" style="text-align:center;color:var(--gray-500);padding:20px">No expenses recorded yet. Use the form above to add daily expenses.</td></tr>';
         } else {
             // Grand total row
             rowsHtml += `<tr style="background:var(--gray-50);font-weight:700">
@@ -3032,9 +3129,9 @@
         if (validRows.length === 0) return alert('Please add at least one item with name, rate and quantity.');
 
         // Ensure data structures exist
-        if (!day.expenseItems) day.expenseItems = { groceries: [], accessories: [], equipment: [], transportMeals: [], transportStaff: [], distribution: [], staff: [] };
+        if (!day.expenseItems) day.expenseItems = { groceries: [], vegetables: [], accessories: [], equipment: [], transportMeals: [], transportStaff: [], distribution: [], staff: [] };
         if (!day.expenses || typeof day.expenses === 'number') {
-            day.expenses = { groceries: 0, accessories: 0, equipment: 0, transportMeals: 0, transportStaff: 0, distribution: 0, staff: 0 };
+            day.expenses = { groceries: 0, vegetables: 0, accessories: 0, equipment: 0, transportMeals: 0, transportStaff: 0, distribution: 0, staff: 0 };
         }
 
         // Add each valid row to the day's expense items
@@ -3064,6 +3161,7 @@
         renderExpenseStats();
         renderExpenseLog();
         renderDashboardExpenses();
+        renderStock();
 
         // Show success feedback
         const btn = document.querySelector('[onclick="submitExpenseInvoice()"]');
@@ -3129,7 +3227,7 @@
 
         // Recalculate category total
         if (!day.expenses || typeof day.expenses === 'number') {
-            day.expenses = { groceries: 0, accessories: 0, equipment: 0, transportMeals: 0, transportStaff: 0, distribution: 0, staff: 0 };
+            day.expenses = { groceries: 0, vegetables: 0, accessories: 0, equipment: 0, transportMeals: 0, transportStaff: 0, distribution: 0, staff: 0 };
         }
         day.expenses[category] = day.expenseItems[category].reduce((s, it) => s + (it.amount || 0), 0);
 
@@ -3138,6 +3236,7 @@
         renderExpenseStats();
         renderExpenseLog();
         renderDashboardExpenses();
+        renderStock();
     }
 
     function renderExpenseStats() {
@@ -3203,12 +3302,12 @@
                     detailHtml += `</div>`;
                 });
                 detailHtml += '</div>';
-                rowsHtml += `<tr><td colspan="10" style="padding:4px 12px 8px;background:var(--gray-50);border-bottom:2px solid var(--gray-200)">${detailHtml}</td></tr>`;
+                rowsHtml += `<tr><td colspan="11" style="padding:4px 12px 8px;background:var(--gray-50);border-bottom:2px solid var(--gray-200)">${detailHtml}</td></tr>`;
             }
         });
 
         if (rowsHtml === '') {
-            rowsHtml = '<tr><td colspan="10" style="text-align:center;color:var(--gray-500);padding:20px">No expenses recorded yet.</td></tr>';
+            rowsHtml = '<tr><td colspan="11" style="text-align:center;color:var(--gray-500);padding:20px">No expenses recorded yet.</td></tr>';
         } else {
             rowsHtml += `<tr style="background:var(--gray-50);font-weight:700">
                 <td colspan="2">TOTAL</td>
@@ -3236,6 +3335,246 @@
             tr:last-child { font-weight: 700; background: #f9f9f9; }
         </style></head><body>
         <h2>${esc(settings.orgName)} - Expenses Report</h2>
+        <p>Generated: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+        ${table.outerHTML}
+        </body></html>`);
+        w.document.close();
+        setTimeout(() => w.print(), 300);
+    }
+
+    // ===================== STOCK MANAGEMENT =====================
+
+    function getStockData() {
+        // Aggregate all expense items from all days for stock categories
+        const stockMap = {}; // key: "category|itemName" → { name, category, received, issued }
+
+        appData.days.forEach(day => {
+            const items = day.expenseItems || {};
+            STOCK_CATEGORIES.forEach(cat => {
+                (items[cat] || []).forEach(it => {
+                    const key = cat + '|' + it.name.toLowerCase().trim();
+                    if (!stockMap[key]) {
+                        stockMap[key] = { name: it.name.trim(), category: cat, received: 0, issued: 0 };
+                    }
+                    stockMap[key].received += (it.qty || 0);
+                });
+            });
+        });
+
+        // Sum up issued quantities
+        (appData.stockIssued || []).forEach(iss => {
+            const key = iss.category + '|' + iss.itemName.toLowerCase().trim();
+            if (stockMap[key]) {
+                stockMap[key].issued += (iss.qty || 0);
+            }
+        });
+
+        return Object.values(stockMap);
+    }
+
+    function renderStock() {
+        renderStockStats();
+        renderStockTable();
+        renderStockHistory();
+        updateStockItemDropdown();
+    }
+
+    function renderStockStats() {
+        const statsEl = document.getElementById('stock-stats');
+        if (!statsEl) return;
+
+        const stockData = getStockData();
+        const totalItems = stockData.length;
+        const totalReceived = stockData.reduce((s, it) => s + it.received, 0);
+        const totalIssued = stockData.reduce((s, it) => s + it.issued, 0);
+        const totalBalance = totalReceived - totalIssued;
+        const lowStock = stockData.filter(it => it.received > 0 && (it.received - it.issued) <= 0).length;
+
+        statsEl.innerHTML = `
+            <div class="stat-card info"><div class="stat-label">Total Items</div><div class="stat-value">${totalItems}</div><div class="stat-sub">In inventory</div></div>
+            <div class="stat-card success"><div class="stat-label">Total Received</div><div class="stat-value">${totalReceived.toLocaleString()}</div><div class="stat-sub">From purchases</div></div>
+            <div class="stat-card warning"><div class="stat-label">Total Issued</div><div class="stat-value">${totalIssued.toLocaleString()}</div><div class="stat-sub">To kitchen/staff</div></div>
+            <div class="stat-card ${lowStock > 0 ? 'danger' : 'primary'}"><div class="stat-label">Balance</div><div class="stat-value">${totalBalance.toLocaleString()}</div><div class="stat-sub">${lowStock > 0 ? lowStock + ' item(s) out of stock' : 'All items in stock'}</div></div>
+        `;
+    }
+
+    function renderStockTable() {
+        const tbody = document.querySelector('#stock-table tbody');
+        if (!tbody) return;
+
+        const filterCat = (document.getElementById('stock-filter-cat') || {}).value || 'all';
+        let stockData = getStockData();
+
+        if (filterCat !== 'all') {
+            stockData = stockData.filter(it => it.category === filterCat);
+        }
+
+        // Sort: out-of-stock first, then by category and name
+        stockData.sort((a, b) => {
+            const balA = a.received - a.issued;
+            const balB = b.received - b.issued;
+            if (balA <= 0 && balB > 0) return -1;
+            if (balA > 0 && balB <= 0) return 1;
+            if (a.category !== b.category) return a.category.localeCompare(b.category);
+            return a.name.localeCompare(b.name);
+        });
+
+        if (stockData.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--gray-500);padding:20px">No stock items yet. Add items via the Expenses page.</td></tr>';
+            return;
+        }
+
+        const catLabels = {};
+        EXPENSE_FIELDS.forEach(f => { catLabels[f.key] = f.label; });
+
+        let html = '';
+        stockData.forEach((it, idx) => {
+            const balance = it.received - it.issued;
+            const pct = it.received > 0 ? Math.round((balance / it.received) * 100) : 0;
+            let statusColor = 'var(--success)';
+            let statusText = 'In Stock';
+            if (balance <= 0) { statusColor = 'var(--danger)'; statusText = 'Out'; }
+            else if (pct <= 25) { statusColor = 'var(--warning)'; statusText = 'Low'; }
+
+            html += `<tr>
+                <td style="color:var(--gray-500);font-size:0.82rem">${idx + 1}</td>
+                <td style="font-weight:600">${esc(it.name)}</td>
+                <td><span style="font-size:0.78rem;padding:2px 8px;border-radius:10px;background:var(--gray-100);color:var(--gray-700)">${catLabels[it.category] || it.category}</span></td>
+                <td style="text-align:right;font-weight:600">${it.received.toLocaleString()}</td>
+                <td style="text-align:right;color:var(--warning);font-weight:600">${it.issued.toLocaleString()}</td>
+                <td style="text-align:right;font-weight:700;color:${statusColor}">${balance.toLocaleString()}</td>
+                <td><span style="font-size:0.75rem;padding:2px 8px;border-radius:10px;background:${statusColor};color:white;font-weight:600">${statusText}</span></td>
+            </tr>`;
+        });
+
+        tbody.innerHTML = html;
+    }
+
+    function updateStockItemDropdown() {
+        const catSel = document.getElementById('stock-issue-cat');
+        const itemSel = document.getElementById('stock-issue-item');
+        if (!catSel || !itemSel) return;
+
+        const category = catSel.value;
+        const stockData = getStockData().filter(it => it.category === category && (it.received - it.issued) > 0);
+
+        if (stockData.length === 0) {
+            itemSel.innerHTML = '<option value="">No items in stock</option>';
+            return;
+        }
+
+        itemSel.innerHTML = stockData.map(it => {
+            const bal = it.received - it.issued;
+            return `<option value="${esc(it.name)}">${esc(it.name)} (${bal} available)</option>`;
+        }).join('');
+    }
+
+    function issueStock() {
+        const catSel = document.getElementById('stock-issue-cat');
+        const itemSel = document.getElementById('stock-issue-item');
+        const qtySel = document.getElementById('stock-issue-qty');
+        const toSel = document.getElementById('stock-issue-to');
+        const noteSel = document.getElementById('stock-issue-note');
+        if (!catSel || !itemSel || !qtySel) return;
+
+        const category = catSel.value;
+        const itemName = itemSel.value;
+        const qty = parseFloat(qtySel.value) || 0;
+        const issuedTo = (toSel ? toSel.value.trim() : '') || 'Kitchen';
+        const note = noteSel ? noteSel.value.trim() : '';
+
+        if (!itemName) return alert('Please select an item.');
+        if (qty <= 0) return alert('Please enter a valid quantity.');
+
+        // Check available balance
+        const stockData = getStockData();
+        const item = stockData.find(it => it.category === category && it.name.toLowerCase() === itemName.toLowerCase());
+        if (item) {
+            const available = item.received - item.issued;
+            if (qty > available) return alert(`Only ${available} available. Cannot issue ${qty}.`);
+        }
+
+        if (!appData.stockIssued) appData.stockIssued = [];
+        appData.stockIssued.push({
+            date: new Date().toISOString().split('T')[0],
+            time: new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' }),
+            category,
+            itemName,
+            qty,
+            issuedTo,
+            note
+        });
+
+        saveData();
+
+        // Clear form
+        qtySel.value = '';
+        if (noteSel) noteSel.value = '';
+
+        renderStock();
+
+        // Success feedback
+        const btn = document.querySelector('[onclick="issueStock()"]');
+        if (btn) {
+            const orig = btn.textContent;
+            btn.textContent = 'Issued!';
+            btn.style.background = 'var(--success)';
+            setTimeout(() => { btn.textContent = orig; btn.style.background = ''; }, 1500);
+        }
+    }
+
+    function renderStockHistory() {
+        const tbody = document.querySelector('#stock-history-table tbody');
+        if (!tbody) return;
+
+        const issued = (appData.stockIssued || []).slice().reverse();
+        if (issued.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:var(--gray-500);padding:20px">No items issued yet.</td></tr>';
+            return;
+        }
+
+        const catLabels = {};
+        EXPENSE_FIELDS.forEach(f => { catLabels[f.key] = f.label; });
+
+        let html = '';
+        issued.forEach((iss, dispIdx) => {
+            const realIdx = appData.stockIssued.length - 1 - dispIdx;
+            html += `<tr>
+                <td style="white-space:nowrap;font-size:0.82rem">${formatDate(iss.date)}${iss.time ? '<br><span style="color:var(--gray-500);font-size:0.75rem">' + iss.time + '</span>' : ''}</td>
+                <td style="font-weight:600">${esc(iss.itemName)}</td>
+                <td><span style="font-size:0.78rem;padding:2px 8px;border-radius:10px;background:var(--gray-100)">${catLabels[iss.category] || iss.category}</span></td>
+                <td style="text-align:right;font-weight:700">${iss.qty}</td>
+                <td>${esc(iss.issuedTo || 'Kitchen')}</td>
+                <td style="font-size:0.82rem;color:var(--gray-600)">${esc(iss.note || '-')}</td>
+                <td><button onclick="undoStockIssue(${realIdx})" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:1rem" title="Undo">&times;</button></td>
+            </tr>`;
+        });
+
+        tbody.innerHTML = html;
+    }
+
+    function undoStockIssue(idx) {
+        if (!confirm('Undo this stock issue?')) return;
+        if (!appData.stockIssued || idx < 0 || idx >= appData.stockIssued.length) return;
+        appData.stockIssued.splice(idx, 1);
+        saveData();
+        renderStock();
+    }
+
+    function printStock() {
+        if (!settings || !appData) return;
+        const table = document.getElementById('stock-table');
+        if (!table) return;
+        const w = window.open('', '_blank');
+        w.document.write(`<!DOCTYPE html><html><head><style>
+            body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 20px; }
+            h2 { text-align: center; margin-bottom: 4px; }
+            p { text-align: center; color: #666; font-size: 0.85rem; margin-bottom: 16px; }
+            table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
+            th { background: #f5f5f5; font-size: 0.7rem; text-transform: uppercase; padding: 8px 6px; border-bottom: 2px solid #ddd; }
+            td { padding: 6px; border-bottom: 1px solid #eee; }
+        </style></head><body>
+        <h2>${esc(settings.orgName)} - Stock Report</h2>
         <p>Generated: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
         ${table.outerHTML}
         </body></html>`);
@@ -3930,6 +4269,7 @@
         renderDistribution();
         renderReports();
         renderExpenses();
+        renderStock();
         renderUpdates();
         renderLiveDisplay();
         const settingsPage = document.getElementById('page-settings');
