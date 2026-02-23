@@ -856,8 +856,28 @@
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(data)
-        }).catch(err => console.warn('Server sync failed:', err));
+        }).then(resp => {
+            if (!resp.ok) throw new Error('Server returned ' + resp.status);
+            _syncFailed = false;
+            const toast = document.getElementById('sync-toast');
+            if (toast) toast.style.display = 'none';
+        }).catch(err => {
+            console.warn('Server sync failed:', err);
+            if (!_syncFailed) {
+                _syncFailed = true;
+                let toast = document.getElementById('sync-toast');
+                if (!toast) {
+                    toast = document.createElement('div');
+                    toast.id = 'sync-toast';
+                    toast.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#dc3545;color:white;padding:10px 20px;border-radius:8px;font-size:0.85rem;font-weight:600;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,0.3)';
+                    document.body.appendChild(toast);
+                }
+                toast.textContent = 'Sync failed - changes saved locally only';
+                toast.style.display = 'block';
+            }
+        });
     }
+    let _syncFailed = false;
 
     async function fetchFromServer(endpoint) {
         try {
@@ -882,6 +902,11 @@
             if (d.location === undefined) d.location = '';
             if (d.mediaOfficer === undefined) d.mediaOfficer = '';
             if (d.locked === undefined) d.locked = false;
+            if (d.actualCooked === undefined) d.actualCooked = 0;
+            if (d.actualDistributed === undefined) d.actualDistributed = 0;
+            if (d.notes === undefined) d.notes = '';
+            if (d.mediaLink === undefined) d.mediaLink = '';
+            if (d.status === undefined) d.status = 'pending';
             (d.allocations || []).forEach(a => {
                 if (a.mediaOfficer === undefined) a.mediaOfficer = '';
                 if (a.location === undefined) a.location = '';
@@ -1725,7 +1750,7 @@
         let html = `<div style="margin-bottom:14px">
             <div style="display:flex;justify-content:space-between;font-size:0.85rem;margin-bottom:4px">
                 <span>Allocated: <strong>${total.toLocaleString()}</strong> / ${cap.toLocaleString()}</span>
-                <span>Remaining: <strong style="color:${remaining > 0 ? 'var(--danger)' : 'var(--success)'}">${remaining > 0 ? remaining.toLocaleString() : 'Full'}</strong></span>
+                <span>Remaining: <strong style="color:${remaining <= 0 ? 'var(--success)' : remaining < cap/2 ? 'var(--warning)' : 'var(--danger)'}">${remaining > 0 ? remaining.toLocaleString() : 'Full'}</strong></span>
             </div>
             <div class="progress-bar" style="height:12px">
                 <div class="progress-fill ${total >= cap ? 'green' : total >= cap/2 ? 'yellow' : 'red'}" style="width:${cap > 0 ? Math.min(Math.round(total/cap*100),100) : 0}%"></div>
@@ -2877,7 +2902,10 @@
     }
 
     // Auto-refresh from server (syncs data across all clients)
+    // Skip refresh while modal is open to prevent losing edits
     setInterval(async () => {
+        const modalOpen = document.getElementById('dayModal').classList.contains('active') || document.getElementById('editOrgModal').classList.contains('active');
+        if (modalOpen) return;
         try {
             const resp = await fetch('/api/data');
             if (resp.ok) {
@@ -2894,7 +2922,6 @@
                 }
             }
         } catch(e) {
-            // Server unreachable, fall back to localStorage
             const freshData = localStorage.getItem('ifthar_app_data');
             if (freshData) {
                 try { appData = JSON.parse(freshData); } catch(e2) {}
