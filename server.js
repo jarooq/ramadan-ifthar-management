@@ -310,31 +310,36 @@ process.on('unhandledRejection', (err) => {
 // ===================== Start Server =====================
 
 async function start() {
+    // Start the HTTP server immediately so Railway sees a healthy port
+    app.listen(PORT, '0.0.0.0', () => {
+        console.log(`\n  Ifthar Management Server running on port ${PORT}\n`);
+        try {
+            const interfaces = os.networkInterfaces();
+            for (const name of Object.keys(interfaces)) {
+                for (const iface of interfaces[name]) {
+                    if (iface.family === 'IPv4' && !iface.internal) {
+                        console.log(`  Network: http://${iface.address}:${PORT}`);
+                    }
+                }
+            }
+        } catch (e) {}
+        console.log('');
+    });
+
+    // Then connect to MongoDB
     try {
-        console.log('\n  Connecting to MongoDB...');
-        const client = new MongoClient(MONGODB_URI);
+        console.log('  Connecting to MongoDB...');
+        const client = new MongoClient(MONGODB_URI, {
+            serverSelectionTimeoutMS: 10000,
+            connectTimeoutMS: 10000
+        });
         await client.connect();
         db = client.db();
         console.log('  MongoDB connected successfully!\n');
-
-        app.listen(PORT, '0.0.0.0', () => {
-            console.log(`  Ifthar Management Server running on port ${PORT}\n`);
-            try {
-                const interfaces = os.networkInterfaces();
-                for (const name of Object.keys(interfaces)) {
-                    for (const iface of interfaces[name]) {
-                        if (iface.family === 'IPv4' && !iface.internal) {
-                            console.log(`  Network: http://${iface.address}:${PORT}`);
-                        }
-                    }
-                }
-            } catch (e) {}
-            console.log('');
-        });
     } catch (e) {
         console.error('  Failed to connect to MongoDB:', e.message);
         console.error('  Set MONGODB_URI environment variable with your MongoDB Atlas connection string');
-        process.exit(1);
+        console.error('  Server running but database unavailable - API calls will return null');
     }
 }
 
