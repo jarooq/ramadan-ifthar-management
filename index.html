@@ -1117,14 +1117,6 @@
                         <label>Start Date</label>
                         <input type="date" id="settingStartDate">
                     </div>
-                    <div class="form-group">
-                        <label>Page Password (Expenses & Stock)</label>
-                        <div style="display:flex;gap:8px">
-                            <input type="password" id="settingPagePassword" placeholder="Leave empty to disable">
-                            <button class="btn btn-sm btn-outline" onclick="togglePasswordVisibility()" type="button" style="white-space:nowrap">Show</button>
-                        </div>
-                        <div class="settings-note">Set a password to protect Expenses & Stock pages. Leave empty to disable.</div>
-                    </div>
                 </div>
                 <div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center">
                     <button class="btn btn-primary" style="flex:1;min-width:140px" onclick="saveSettings()">Save Settings</button>
@@ -1417,8 +1409,6 @@
         document.getElementById('settingCapacity').value = s.dailyCapacity;
         document.getElementById('settingTotalDays').value = s.totalDays;
         document.getElementById('settingStartDate').value = s.startDate;
-        const pwField = document.getElementById('settingPagePassword');
-        if (pwField) pwField.value = s.pagePassword || '';
     }
 
     function saveSettings() {
@@ -1429,10 +1419,9 @@
         if (!orgName) return alert('Please enter your organization name.');
         if (capacity <= 0) return alert('Please enter a valid daily capacity.');
         if (!startDate) return alert('Please select a start date.');
-        const pagePassword = (document.getElementById('settingPagePassword') || {}).value || '';
         const dateChanged = startDate !== settings.startDate;
         const totalChanged = totalDays !== settings.totalDays;
-        settings = { orgName, dailyCapacity: capacity, totalDays, startDate, pagePassword };
+        settings = { orgName, dailyCapacity: capacity, totalDays, startDate };
         saveSettingsToStorage(settings);
         if (totalChanged) {
             if (confirm('Total days changed. Rebuild daily plan? (Organizations will be kept, allocations will be reset.)')) {
@@ -1514,8 +1503,8 @@
         document.getElementById('sidebar').classList.remove('open');
         document.getElementById('sidebarOverlay').classList.remove('active');
     }
+    const PAGE_PASSWORD = 'ger123456';
     function isPageProtected(page) {
-        if (!settings || !settings.pagePassword) return false;
         return PROTECTED_PAGES.includes(page) && !_pageUnlocked;
     }
     function navigateTo(page) {
@@ -1561,7 +1550,7 @@
         const errEl = document.getElementById('passwordError');
         if (!input) return;
         const pw = input.value;
-        if (settings && pw === settings.pagePassword) {
+        if (pw === PAGE_PASSWORD) {
             _pageUnlocked = true;
             document.getElementById('passwordModal').style.display = 'none';
             if (_pendingPage) {
@@ -1579,17 +1568,6 @@
         _pendingPage = null;
         // Navigate back to dashboard
         _doNavigate('dashboard');
-    }
-    function togglePasswordVisibility() {
-        const pw = document.getElementById('settingPagePassword');
-        const btn = event.target;
-        if (pw.type === 'password') {
-            pw.type = 'text';
-            btn.textContent = 'Hide';
-        } else {
-            pw.type = 'password';
-            btn.textContent = 'Show';
-        }
     }
     // Old nav-tab click handler (backward compat)
     document.querySelectorAll('.nav-tab').forEach(tab => {
