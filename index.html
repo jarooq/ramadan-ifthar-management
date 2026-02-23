@@ -759,11 +759,30 @@
 
         <!-- EXPENSES -->
         <div class="page" id="page-expenses">
-            <div class="stats-grid" id="expenses-stats"></div>
+            <!-- Entry Form -->
             <div class="card">
                 <div class="card-title">
-                    <span>Daily Expenses Breakdown</span>
-                    <button class="btn btn-sm btn-primary no-print" onclick="printExpenses()">Print Expenses</button>
+                    <span>Add / Edit Daily Expense</span>
+                </div>
+                <div style="margin-bottom:14px">
+                    <label style="font-size:0.8rem;font-weight:600;color:var(--gray-700);display:block;margin-bottom:4px">Select Day</label>
+                    <select id="expense-day-select" onchange="loadExpenseDay()" style="width:100%;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:6px;font-size:0.9rem"></select>
+                </div>
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px" id="expense-form-fields"></div>
+                <div style="margin-top:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+                    <button class="btn btn-primary" onclick="saveExpenseDay()">Save Expenses</button>
+                    <span id="expense-day-total" style="font-size:0.9rem;font-weight:700;color:var(--primary)"></span>
+                </div>
+            </div>
+
+            <!-- Totals Summary -->
+            <div class="stats-grid" id="expenses-stats"></div>
+
+            <!-- History Table -->
+            <div class="card">
+                <div class="card-title">
+                    <span>Expenses Log</span>
+                    <button class="btn btn-sm btn-primary no-print" onclick="printExpenses()">Print</button>
                 </div>
                 <div class="table-wrap">
                     <table id="expenses-table">
@@ -2751,7 +2770,18 @@
         if (!settings || !appData) return;
         const statsEl = document.getElementById('expenses-stats');
         const tbody = document.querySelector('#expenses-table tbody');
+        const daySel = document.getElementById('expense-day-select');
         if (!statsEl || !tbody) return;
+
+        // Populate day selector
+        if (daySel && daySel.options.length === 0) {
+            const now = new Date();
+            const todayStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+            daySel.innerHTML = appData.days.map(d =>
+                `<option value="${d.day}"${d.date === todayStr ? ' selected' : ''}>Day ${d.day} - ${formatDate(d.date)}${d.date === todayStr ? ' (Today)' : ''}</option>`
+            ).join('');
+            loadExpenseDay();
+        }
 
         // Calculate totals per category
         const totals = {};
@@ -2778,79 +2808,155 @@
                 <div class="stat-sub">${grandTotal > 0 ? ((totals[f.key] / grandTotal) * 100).toFixed(1) : 0}%</div>
             </div>`).join('');
 
-        // Table rows
+        // Log table — only show days that have expenses
         let rowsHtml = '';
         appData.days.forEach(day => {
             const exp = day.expenses || {};
             const dayTotal = getExpenseTotal(exp);
-            rowsHtml += `<tr>
+            if (dayTotal === 0) return; // Skip days with no expenses
+            rowsHtml += `<tr style="cursor:pointer" onclick="document.getElementById('expense-day-select').value=${day.day};loadExpenseDay();">
                 <td style="font-weight:600;white-space:nowrap">Day ${day.day}</td>
                 <td style="white-space:nowrap;font-size:0.8rem">${formatDate(day.date)}</td>
-                ${EXPENSE_FIELDS.map(f => `<td><input type="number" value="${exp[f.key] || 0}" min="0" style="width:80px;padding:4px 6px;border:1.5px solid var(--gray-200);border-radius:4px;font-size:0.82rem;text-align:right" onchange="saveExpenseField(${day.day},'${f.key}',this.value)"></td>`).join('')}
-                <td style="font-weight:700;text-align:right">${dayTotal.toLocaleString()}</td>
+                ${EXPENSE_FIELDS.map(f => `<td style="text-align:right;${exp[f.key] > 0 ? 'font-weight:600' : 'color:var(--gray-300)'}">${exp[f.key] > 0 ? exp[f.key].toLocaleString() : '-'}</td>`).join('')}
+                <td style="font-weight:700;text-align:right;color:var(--primary)">${dayTotal.toLocaleString()}</td>
             </tr>`;
         });
 
-        // Grand total row
-        rowsHtml += `<tr style="background:var(--gray-50);font-weight:700">
-            <td colspan="2">TOTAL</td>
-            ${EXPENSE_FIELDS.map(f => `<td style="text-align:right">${totals[f.key].toLocaleString()}</td>`).join('')}
-            <td style="text-align:right;color:var(--primary);font-size:1rem">${grandTotal.toLocaleString()}</td>
-        </tr>`;
+        if (rowsHtml === '') {
+            rowsHtml = '<tr><td colspan="10" style="text-align:center;color:var(--gray-500);padding:20px">No expenses recorded yet. Use the form above to add daily expenses.</td></tr>';
+        } else {
+            // Grand total row
+            rowsHtml += `<tr style="background:var(--gray-50);font-weight:700">
+                <td colspan="2">TOTAL</td>
+                ${EXPENSE_FIELDS.map(f => `<td style="text-align:right">${totals[f.key].toLocaleString()}</td>`).join('')}
+                <td style="text-align:right;color:var(--primary);font-size:1rem">${grandTotal.toLocaleString()}</td>
+            </tr>`;
+        }
 
         tbody.innerHTML = rowsHtml;
     }
 
-    function saveExpenseField(dayNum, field, value) {
+    function loadExpenseDay() {
+        const daySel = document.getElementById('expense-day-select');
+        const fieldsEl = document.getElementById('expense-form-fields');
+        const totalEl = document.getElementById('expense-day-total');
+        if (!daySel || !fieldsEl) return;
+
+        const dayNum = parseInt(daySel.value);
         const day = appData.days[dayNum - 1];
         if (!day) return;
+        const exp = day.expenses || {};
+
+        fieldsEl.innerHTML = EXPENSE_FIELDS.map(f => `<div class="form-group">
+            <label style="display:flex;align-items:center;gap:6px">
+                <span style="width:8px;height:8px;border-radius:50%;background:${f.color};display:inline-block"></span>
+                ${f.label}
+            </label>
+            <input type="number" id="exp-${f.key}" value="${exp[f.key] || 0}" min="0" placeholder="0" oninput="updateExpenseFormTotal()">
+        </div>`).join('');
+
+        updateExpenseFormTotal();
+    }
+
+    function updateExpenseFormTotal() {
+        const totalEl = document.getElementById('expense-day-total');
+        if (!totalEl) return;
+        let total = 0;
+        EXPENSE_FIELDS.forEach(f => {
+            const el = document.getElementById('exp-' + f.key);
+            if (el) total += parseFloat(el.value) || 0;
+        });
+        totalEl.textContent = 'Day Total: ' + total.toLocaleString();
+    }
+
+    function saveExpenseDay() {
+        const daySel = document.getElementById('expense-day-select');
+        if (!daySel) return;
+        const dayNum = parseInt(daySel.value);
+        const day = appData.days[dayNum - 1];
+        if (!day) return;
+
         if (!day.expenses || typeof day.expenses === 'number') {
             day.expenses = { groceries: 0, accessories: 0, equipment: 0, transportMeals: 0, transportStaff: 0, distribution: 0, staff: 0 };
         }
-        day.expenses[field] = parseFloat(value) || 0;
+
+        EXPENSE_FIELDS.forEach(f => {
+            const el = document.getElementById('exp-' + f.key);
+            if (el) day.expenses[f.key] = parseFloat(el.value) || 0;
+        });
+
         saveData();
-        // Only update stat cards to avoid losing input focus
+        renderExpenseStats();
+        renderExpenseLog();
+        renderDashboardExpenses();
+
+        // Show saved confirmation
+        const totalEl = document.getElementById('expense-day-total');
+        if (totalEl) {
+            const total = getExpenseTotal(day.expenses);
+            totalEl.innerHTML = 'Day Total: ' + total.toLocaleString() + ' <span style="color:var(--success);font-size:0.8rem;margin-left:8px">Saved!</span>';
+            setTimeout(() => updateExpenseFormTotal(), 2000);
+        }
+    }
+
+    function renderExpenseStats() {
         const statsEl = document.getElementById('expenses-stats');
-        if (statsEl) {
-            const totals = {};
-            EXPENSE_FIELDS.forEach(f => { totals[f.key] = 0; });
-            let grandTotal = 0;
-            appData.days.forEach(d => {
-                const exp = d.expenses || {};
-                EXPENSE_FIELDS.forEach(f => { totals[f.key] += (exp[f.key] || 0); });
-                grandTotal += getExpenseTotal(exp);
-            });
-            statsEl.innerHTML = `<div class="stat-card success">
-                    <div class="stat-label">Grand Total</div>
-                    <div class="stat-value">${grandTotal.toLocaleString()}</div>
-                    <div class="stat-sub">All categories combined</div>
-                </div>` +
-                EXPENSE_FIELDS.map(f => `<div class="stat-card" style="border-left-color:${f.color}">
-                    <div class="stat-label">${f.label}</div>
-                    <div class="stat-value">${totals[f.key].toLocaleString()}</div>
-                    <div class="stat-sub">${grandTotal > 0 ? ((totals[f.key] / grandTotal) * 100).toFixed(1) : 0}%</div>
-                </div>`).join('');
+        if (!statsEl) return;
+        const totals = {};
+        EXPENSE_FIELDS.forEach(f => { totals[f.key] = 0; });
+        let grandTotal = 0;
+        appData.days.forEach(day => {
+            const exp = day.expenses || {};
+            EXPENSE_FIELDS.forEach(f => { totals[f.key] += (exp[f.key] || 0); });
+            grandTotal += getExpenseTotal(exp);
+        });
+        statsEl.innerHTML = `<div class="stat-card success">
+                <div class="stat-label">Grand Total</div>
+                <div class="stat-value">${grandTotal.toLocaleString()}</div>
+                <div class="stat-sub">All categories combined</div>
+            </div>` +
+            EXPENSE_FIELDS.map(f => `<div class="stat-card" style="border-left-color:${f.color}">
+                <div class="stat-label">${f.label}</div>
+                <div class="stat-value">${totals[f.key].toLocaleString()}</div>
+                <div class="stat-sub">${grandTotal > 0 ? ((totals[f.key] / grandTotal) * 100).toFixed(1) : 0}%</div>
+            </div>`).join('');
+    }
+
+    function renderExpenseLog() {
+        const tbody = document.querySelector('#expenses-table tbody');
+        if (!tbody) return;
+        const totals = {};
+        EXPENSE_FIELDS.forEach(f => { totals[f.key] = 0; });
+        let grandTotal = 0;
+        appData.days.forEach(day => {
+            const exp = day.expenses || {};
+            EXPENSE_FIELDS.forEach(f => { totals[f.key] += (exp[f.key] || 0); });
+            grandTotal += getExpenseTotal(exp);
+        });
+
+        let rowsHtml = '';
+        appData.days.forEach(day => {
+            const exp = day.expenses || {};
+            const dayTotal = getExpenseTotal(exp);
+            if (dayTotal === 0) return;
+            rowsHtml += `<tr style="cursor:pointer" onclick="document.getElementById('expense-day-select').value=${day.day};loadExpenseDay();">
+                <td style="font-weight:600;white-space:nowrap">Day ${day.day}</td>
+                <td style="white-space:nowrap;font-size:0.8rem">${formatDate(day.date)}</td>
+                ${EXPENSE_FIELDS.map(f => `<td style="text-align:right;${exp[f.key] > 0 ? 'font-weight:600' : 'color:var(--gray-300)'}">${exp[f.key] > 0 ? exp[f.key].toLocaleString() : '-'}</td>`).join('')}
+                <td style="font-weight:700;text-align:right;color:var(--primary)">${dayTotal.toLocaleString()}</td>
+            </tr>`;
+        });
+
+        if (rowsHtml === '') {
+            rowsHtml = '<tr><td colspan="10" style="text-align:center;color:var(--gray-500);padding:20px">No expenses recorded yet.</td></tr>';
+        } else {
+            rowsHtml += `<tr style="background:var(--gray-50);font-weight:700">
+                <td colspan="2">TOTAL</td>
+                ${EXPENSE_FIELDS.map(f => `<td style="text-align:right">${totals[f.key].toLocaleString()}</td>`).join('')}
+                <td style="text-align:right;color:var(--primary);font-size:1rem">${grandTotal.toLocaleString()}</td>
+            </tr>`;
         }
-        // Update row total
-        const row = document.querySelector(`#expenses-table tbody tr:nth-child(${dayNum})`);
-        if (row) {
-            const lastTd = row.querySelector('td:last-child');
-            if (lastTd) lastTd.textContent = getExpenseTotal(appData.days[dayNum - 1].expenses).toLocaleString();
-        }
-        // Update grand total row
-        const rows = document.querySelectorAll('#expenses-table tbody tr');
-        const lastRow = rows[rows.length - 1];
-        if (lastRow) {
-            let grandTotal = 0;
-            appData.days.forEach(d => { grandTotal += getExpenseTotal(d.expenses); });
-            const cells = lastRow.querySelectorAll('td');
-            EXPENSE_FIELDS.forEach((f, i) => {
-                let t = 0;
-                appData.days.forEach(d => { t += (d.expenses && d.expenses[f.key]) || 0; });
-                cells[i + 1].textContent = t.toLocaleString();
-            });
-            cells[cells.length - 1].textContent = grandTotal.toLocaleString();
-        }
+        tbody.innerHTML = rowsHtml;
     }
 
     function printExpenses() {
@@ -2868,7 +2974,6 @@
             td { padding: 6px; border-bottom: 1px solid #eee; text-align: right; }
             td:first-child, td:nth-child(2) { text-align: left; }
             tr:last-child { font-weight: 700; background: #f9f9f9; }
-            input { border: none; background: transparent; text-align: right; font-size: 0.8rem; width: 70px; }
         </style></head><body>
         <h2>${esc(settings.orgName)} - Expenses Report</h2>
         <p>Generated: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
