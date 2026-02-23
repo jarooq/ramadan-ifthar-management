@@ -1117,6 +1117,14 @@
                         <label>Start Date</label>
                         <input type="date" id="settingStartDate">
                     </div>
+                    <div class="form-group">
+                        <label>Page Password (Expenses & Stock)</label>
+                        <div style="display:flex;gap:8px">
+                            <input type="password" id="settingPagePassword" placeholder="Leave empty to disable">
+                            <button class="btn btn-sm btn-outline" onclick="togglePasswordVisibility()" type="button" style="white-space:nowrap">Show</button>
+                        </div>
+                        <div class="settings-note">Set a password to protect Expenses & Stock pages. Leave empty to disable.</div>
+                    </div>
                 </div>
                 <div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center">
                     <button class="btn btn-primary" style="flex:1;min-width:140px" onclick="saveSettings()">Save Settings</button>
@@ -1152,6 +1160,21 @@
                 <button class="modal-close" onclick="closeEditOrgModal()">&times;</button>
             </div>
             <div id="edit-org-body"></div>
+        </div>
+    </div>
+
+    <!-- Password Modal -->
+    <div class="modal-overlay" id="passwordModal" style="display:none">
+        <div class="modal" style="max-width:360px;text-align:center">
+            <div style="font-size:2.5rem;margin-bottom:8px">&#128274;</div>
+            <h3 style="margin:0 0 4px;font-size:1.1rem">Protected Page</h3>
+            <p style="font-size:0.82rem;color:var(--gray-500);margin-bottom:16px">Enter password to access this page.</p>
+            <input type="password" id="pagePasswordInput" placeholder="Enter password" onkeydown="if(event.key==='Enter')checkPagePassword()" style="width:100%;padding:12px;border:1.5px solid var(--gray-200);border-radius:8px;font-size:1rem;text-align:center;margin-bottom:12px">
+            <div id="passwordError" style="color:var(--danger);font-size:0.82rem;margin-bottom:10px;display:none">Incorrect password</div>
+            <div style="display:flex;gap:8px">
+                <button class="btn btn-outline" onclick="cancelPasswordModal()" style="flex:1">Cancel</button>
+                <button class="btn btn-primary" onclick="checkPagePassword()" style="flex:1">Unlock</button>
+            </div>
         </div>
     </div>
 
@@ -1394,6 +1417,8 @@
         document.getElementById('settingCapacity').value = s.dailyCapacity;
         document.getElementById('settingTotalDays').value = s.totalDays;
         document.getElementById('settingStartDate').value = s.startDate;
+        const pwField = document.getElementById('settingPagePassword');
+        if (pwField) pwField.value = s.pagePassword || '';
     }
 
     function saveSettings() {
@@ -1404,9 +1429,10 @@
         if (!orgName) return alert('Please enter your organization name.');
         if (capacity <= 0) return alert('Please enter a valid daily capacity.');
         if (!startDate) return alert('Please select a start date.');
+        const pagePassword = (document.getElementById('settingPagePassword') || {}).value || '';
         const dateChanged = startDate !== settings.startDate;
         const totalChanged = totalDays !== settings.totalDays;
-        settings = { orgName, dailyCapacity: capacity, totalDays, startDate };
+        settings = { orgName, dailyCapacity: capacity, totalDays, startDate, pagePassword };
         saveSettingsToStorage(settings);
         if (totalChanged) {
             if (confirm('Total days changed. Rebuild daily plan? (Organizations will be kept, allocations will be reset.)')) {
@@ -1476,6 +1502,10 @@
     }
 
     // ===================== SIDEBAR & NAVIGATION =====================
+    const PROTECTED_PAGES = ['expenses', 'stock'];
+    let _pageUnlocked = false; // session-level unlock flag
+    let _pendingPage = null;
+
     function toggleSidebar() {
         document.getElementById('sidebar').classList.toggle('open');
         document.getElementById('sidebarOverlay').classList.toggle('active');
@@ -1484,7 +1514,21 @@
         document.getElementById('sidebar').classList.remove('open');
         document.getElementById('sidebarOverlay').classList.remove('active');
     }
+    function isPageProtected(page) {
+        if (!settings || !settings.pagePassword) return false;
+        return PROTECTED_PAGES.includes(page) && !_pageUnlocked;
+    }
     function navigateTo(page) {
+        // Check password protection
+        if (isPageProtected(page)) {
+            _pendingPage = page;
+            showPasswordModal();
+            if (window.innerWidth <= 768) closeSidebar();
+            return;
+        }
+        _doNavigate(page);
+    }
+    function _doNavigate(page) {
         // Update sidebar active state
         document.querySelectorAll('.sidebar-item').forEach(s => s.classList.remove('active'));
         const activeItem = document.querySelector('.sidebar-item[data-page="' + page + '"]');
@@ -1503,6 +1547,49 @@
         // Close sidebar only on mobile
         if (window.innerWidth <= 768) closeSidebar();
         refresh();
+    }
+    function showPasswordModal() {
+        const modal = document.getElementById('passwordModal');
+        const input = document.getElementById('pagePasswordInput');
+        const errEl = document.getElementById('passwordError');
+        if (modal) modal.style.display = 'flex';
+        if (input) { input.value = ''; input.focus(); }
+        if (errEl) errEl.style.display = 'none';
+    }
+    function checkPagePassword() {
+        const input = document.getElementById('pagePasswordInput');
+        const errEl = document.getElementById('passwordError');
+        if (!input) return;
+        const pw = input.value;
+        if (settings && pw === settings.pagePassword) {
+            _pageUnlocked = true;
+            document.getElementById('passwordModal').style.display = 'none';
+            if (_pendingPage) {
+                _doNavigate(_pendingPage);
+                _pendingPage = null;
+            }
+        } else {
+            if (errEl) errEl.style.display = 'block';
+            input.value = '';
+            input.focus();
+        }
+    }
+    function cancelPasswordModal() {
+        document.getElementById('passwordModal').style.display = 'none';
+        _pendingPage = null;
+        // Navigate back to dashboard
+        _doNavigate('dashboard');
+    }
+    function togglePasswordVisibility() {
+        const pw = document.getElementById('settingPagePassword');
+        const btn = event.target;
+        if (pw.type === 'password') {
+            pw.type = 'text';
+            btn.textContent = 'Hide';
+        } else {
+            pw.type = 'password';
+            btn.textContent = 'Show';
+        }
     }
     // Old nav-tab click handler (backward compat)
     document.querySelectorAll('.nav-tab').forEach(tab => {
