@@ -78,8 +78,19 @@
         tr:hover td { background: var(--gray-50); }
         .badge { display: inline-block; padding: 3px 10px; border-radius: 20px; font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; }
         .badge-pending { background: var(--warning-light); color: #946b00; }
+        .badge-scheduled { background: var(--warning-light); color: #946b00; }
+        .badge-cooking { background: #fff0e6; color: #e65100; }
         .badge-cooked { background: #e8f5ef; color: var(--primary); }
         .badge-distributed { background: #e3f2fd; color: #1565c0; }
+        .badge-reported { background: #f3e8fd; color: #7b1fa2; }
+        .status-pills { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+        .status-pill { padding: 8px 14px; border-radius: 20px; font-size: 0.78rem; font-weight: 600; border: 2px solid var(--gray-200); background: white; color: var(--gray-500); cursor: pointer; transition: all 0.2s; text-transform: uppercase; letter-spacing: 0.3px; }
+        .status-pill:hover { border-color: var(--gray-300); background: var(--gray-50); }
+        .status-pill.active-scheduled { background: var(--warning-light); color: #946b00; border-color: #f0ad4e; }
+        .status-pill.active-cooking { background: #fff0e6; color: #e65100; border-color: #e65100; }
+        .status-pill.active-cooked { background: #e8f5ef; color: var(--primary); border-color: var(--primary); }
+        .status-pill.active-distributed { background: #e3f2fd; color: #1565c0; border-color: #1565c0; }
+        .status-pill.active-reported { background: #f3e8fd; color: #7b1fa2; border-color: #7b1fa2; }
         .badge-daily { background: #e8f5ef; color: var(--primary); }
         .badge-alternate { background: #fff3cd; color: #856404; }
         .badge-weekly { background: #e3f2fd; color: #1565c0; }
@@ -94,8 +105,11 @@
         .day-card { background: white; border: 1.5px solid var(--gray-200); border-radius: 8px; padding: 12px; cursor: pointer; transition: all 0.2s; }
         .day-card:hover { border-color: var(--primary); box-shadow: var(--shadow); }
         .day-card.status-pending { border-left: 4px solid var(--warning); }
+        .day-card.status-scheduled { border-left: 4px solid var(--warning); }
+        .day-card.status-cooking { border-left: 4px solid #e65100; }
         .day-card.status-cooked { border-left: 4px solid var(--success); }
         .day-card.status-distributed { border-left: 4px solid var(--info); }
+        .day-card.status-reported { border-left: 4px solid #7b1fa2; }
         .day-card .day-num { font-weight: 700; font-size: 1rem; color: var(--primary); }
         .day-card .day-date { font-size: 0.72rem; color: var(--gray-500); }
         .day-card .day-meals { font-size: 0.85rem; font-weight: 600; margin-top: 6px; }
@@ -204,9 +218,11 @@
 
         /* Status badge */
         .live-screen .tv-status { display:inline-block; padding:5px 16px; border-radius:4px; font-size:0.85rem; font-weight:800; text-transform:uppercase; letter-spacing:2px; }
-        .live-screen .tv-status.pending { background:rgba(241,196,15,0.2); color:#f1c40f; animation:tvPulse 2s ease-in-out infinite; }
+        .live-screen .tv-status.pending, .live-screen .tv-status.scheduled { background:rgba(241,196,15,0.2); color:#f1c40f; animation:tvPulse 2s ease-in-out infinite; }
+        .live-screen .tv-status.cooking { background:rgba(230,81,0,0.2); color:#e65100; animation:tvPulse 2s ease-in-out infinite; }
         .live-screen .tv-status.cooked { background:rgba(46,204,113,0.2); color:#2ecc71; animation:tvPulse 2s ease-in-out infinite; }
         .live-screen .tv-status.distributed { background:rgba(52,152,219,0.2); color:#3498db; animation:tvPulse 2s ease-in-out infinite; }
+        .live-screen .tv-status.reported { background:rgba(123,31,162,0.2); color:#7b1fa2; animation:tvPulse 2s ease-in-out infinite; }
 
         /* Progress bar */
         .live-screen .tv-progress { margin-bottom:16px; animation:tvSlideUp 0.6s ease-out 1.1s both; }
@@ -943,6 +959,7 @@
                 actualCooked: 0,
                 actualDistributed: 0,
                 notes: '',
+                mediaLink: '',
                 locked: false
             });
         }
@@ -1260,7 +1277,7 @@
 
         // Update name in completed day allocations
         appData.days.forEach(day => {
-            if (day.status === 'cooked' || day.status === 'distributed') {
+            if (day.status === 'cooking' || day.status === 'cooked' || day.status === 'distributed' || day.status === 'reported') {
                 day.allocations.forEach(a => { if (a.orgId === id) a.orgName = org.name; });
             }
         });
@@ -1291,7 +1308,9 @@
             }
             const dayDate = new Date(day.date + 'T00:00:00');
             const dayName = DAY_NAMES_FULL[dayDate.getDay()];
-            const statusBadge = `<span class="badge badge-${day.status}">${day.status}</span>`;
+            const sStatus = day.status === 'pending' ? 'scheduled' : day.status;
+            const sNames = { scheduled:'Scheduled', cooking:'Cooking', cooked:'Cooked', distributed:'Distributed', reported:'Reported' };
+            const statusBadge = `<span class="badge badge-${sStatus}">${sNames[sStatus] || sStatus}</span>`;
             const staff = alloc && alloc.mediaOfficer ? esc(alloc.mediaOfficer) : '-';
             const location = alloc && alloc.location ? esc(alloc.location) : '-';
 
@@ -1406,7 +1425,7 @@
     // Each org gets EXACTLY their fixed daily minimum on scheduled days.
     // Daily total = sum of minimums (varies day to day, never exceeds capacity).
     function isDayLocked(day) {
-        if (day.status === 'cooked' || day.status === 'distributed' || day.locked) return true;
+        if (day.status === 'cooking' || day.status === 'cooked' || day.status === 'distributed' || day.status === 'reported' || day.locked) return true;
         // Lock today, tomorrow, and past days
         const now = new Date();
         const todayStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
@@ -1630,7 +1649,7 @@
         appData.days.forEach(d => {
             // Never touch today, tomorrow, past, or completed days
             if (d.date <= tmrwStr) return;
-            if (d.status === 'cooked' || d.status === 'distributed') return;
+            if (d.status === 'cooking' || d.status === 'cooked' || d.status === 'distributed' || d.status === 'reported') return;
             // If day was manually edited (locked + has allocations), keep it
             if (d.locked && d.allocations.length > 0) return;
             d.locked = false;
@@ -1668,8 +1687,10 @@
             const dayDate = new Date(day.date + 'T00:00:00');
             const dayName = DAY_NAMES[dayDate.getDay()];
 
-            const isLocked = day.locked || day.status === 'cooked' || day.status === 'distributed';
-            return `<div class="day-card status-${day.status} ${isToday ? 'today' : ''}" onclick="openDayModal(${day.day})">
+            const isLocked = day.locked || day.status === 'cooked' || day.status === 'distributed' || day.status === 'cooking' || day.status === 'reported';
+            const displayStatus = day.status === 'pending' ? 'scheduled' : day.status;
+            const statusNames = { scheduled:'Scheduled', cooking:'Cooking', cooked:'Cooked', distributed:'Distributed', reported:'Reported', pending:'Scheduled' };
+            return `<div class="day-card status-${displayStatus} ${isToday ? 'today' : ''}" onclick="openDayModal(${day.day})">
                 <div class="day-num">Day ${day.day} <span style="font-weight:400;font-size:0.8rem;color:var(--gray-500)">${dayName}</span>${isLocked ? ' <span title="Locked - won\'t change on reschedule" style="font-size:0.7rem">&#128274;</span>' : ''}</div>
                 <div class="day-date">${formatDate(day.date)}${isToday ? ' (Today)' : ''}</div>
                 <div class="day-meals">${total.toLocaleString()} / ${cap.toLocaleString()}</div>
@@ -1681,7 +1702,7 @@
                     if (a.contactPerson) t += ' [' + a.contactPerson + (a.contactNumber ? ': ' + a.contactNumber : '') + ']';
                     return t;
                 }).join(', ') || 'No allocations'}</div>
-                <div class="day-status"><span class="badge badge-${day.status}">${day.status}</span></div>
+                <div class="day-status"><span class="badge badge-${displayStatus}">${statusNames[displayStatus] || displayStatus}</span>${day.mediaLink ? ' <a href="' + esc(day.mediaLink) + '" target="_blank" onclick="event.stopPropagation()" style="font-size:0.7rem;color:var(--info)">Media</a>' : ''}</div>
             </div>`;
         }).join('');
     }
@@ -1744,16 +1765,15 @@
             </div>`;
         }
 
+        const statuses = ['scheduled','cooking','cooked','distributed','reported'];
+        const statusLabels = { scheduled:'Scheduled', cooking:'Cooking', cooked:'Cooked', distributed:'Distributed', reported:'Reported' };
+        const curStatus = (day.status === 'pending' ? 'scheduled' : day.status);
         html += `<div style="padding:12px;background:var(--gray-50);border-radius:8px">
-            <strong style="font-size:0.85rem">Update Status:</strong>
-            <div class="form-row" style="margin-top:8px">
-                <div class="form-group"><label>Status</label>
-                    <select id="modal-status">
-                        <option value="pending" ${day.status === 'pending' ? 'selected' : ''}>Pending</option>
-                        <option value="cooked" ${day.status === 'cooked' ? 'selected' : ''}>Cooked</option>
-                        <option value="distributed" ${day.status === 'distributed' ? 'selected' : ''}>Distributed</option>
-                    </select>
-                </div>
+            <strong style="font-size:0.85rem">Status:</strong>
+            <div class="status-pills">
+                ${statuses.map(s => `<button class="status-pill ${curStatus === s ? 'active-' + s : ''}" onclick="quickSetStatus(${dayNum},'${s}')">${statusLabels[s]}</button>`).join('')}
+            </div>
+            <div class="form-row" style="margin-top:12px">
                 <div class="form-group"><label>Actual Cooked</label>
                     <input type="number" id="modal-cooked" value="${day.actualCooked}" min="0">
                 </div>
@@ -1763,6 +1783,12 @@
             </div>
             <div class="form-group" style="margin-top:8px"><label>Notes</label>
                 <textarea id="modal-notes" rows="2" placeholder="Notes...">${esc(day.notes)}</textarea>
+            </div>
+            <div class="form-group" style="margin-top:8px"><label>Media Link</label>
+                <div style="display:flex;gap:6px">
+                    <input type="url" id="modal-medialink" value="${esc(day.mediaLink || '')}" placeholder="Google Drive, YouTube link..." style="flex:1">
+                    ${day.mediaLink ? `<a href="${esc(day.mediaLink)}" target="_blank" class="btn btn-sm btn-outline">Open</a>` : ''}
+                </div>
             </div>
             <div style="margin-top:10px">
                 <button class="btn btn-success btn-sm" onclick="saveDayDetails(${dayNum})">Save Changes</button>
@@ -1820,6 +1846,26 @@
         saveData(); runScheduler(); openDayModal(dayNum); renderDaysGrid();
     }
 
+    function quickSetStatus(dayNum, status) {
+        const day = appData.days[dayNum - 1];
+        if (!day) return;
+        // Save any input values first
+        saveAllocInputs(dayNum);
+        const cookedEl = document.getElementById('modal-cooked');
+        const distEl = document.getElementById('modal-distributed');
+        const notesEl = document.getElementById('modal-notes');
+        const mediaEl = document.getElementById('modal-medialink');
+        if (cookedEl) day.actualCooked = parseInt(cookedEl.value) || 0;
+        if (distEl) day.actualDistributed = parseInt(distEl.value) || 0;
+        if (notesEl) day.notes = notesEl.value.trim();
+        if (mediaEl) day.mediaLink = mediaEl.value.trim();
+        day.status = status;
+        day.locked = true;
+        saveData();
+        openDayModal(dayNum);
+        renderDaysGrid();
+    }
+
     function saveDayDetails(dayNum) {
         const day = appData.days[dayNum - 1];
         // Save per-allocation media officer and location
@@ -1839,13 +1885,13 @@
             const idx = parseInt(el.dataset.idx);
             if (day.allocations[idx]) day.allocations[idx].contactNumber = el.value.trim();
         });
-        day.status = document.getElementById('modal-status').value;
         day.actualCooked = parseInt(document.getElementById('modal-cooked').value) || 0;
         day.actualDistributed = parseInt(document.getElementById('modal-distributed').value) || 0;
         day.notes = document.getElementById('modal-notes').value.trim();
-        day.locked = true;  // Lock this day so scheduler won't overwrite it
+        day.mediaLink = (document.getElementById('modal-medialink').value || '').trim();
+        day.locked = true;
         saveData();
-        runScheduler();  // Auto-recalculate remaining unlocked days
+        runScheduler();
         refresh(); closeModal();
     }
 
@@ -1982,7 +2028,7 @@
                     <td>${staff}</td>
                     <td>${loc}</td>
                     <td>${contact}</td>
-                    <td><span class="badge badge-${day.status}">${day.status}</span></td>
+                    <td><span class="badge badge-${day.status === 'pending' ? 'scheduled' : day.status}">${({pending:'Scheduled',scheduled:'Scheduled',cooking:'Cooking',cooked:'Cooked',distributed:'Distributed',reported:'Reported'})[day.status] || day.status}</span></td>
                 </tr>`;
             });
 
@@ -2040,7 +2086,7 @@
         const totalCapacity = cap * totalDays;
         const unallocated = totalReceived - totalAllocated;
         const daysFullyAllocated = appData.days.filter(d => d.allocations.reduce((s, a) => s + a.qty, 0) >= cap).length;
-        const daysCookedOrDist = appData.days.filter(d => d.status === 'cooked' || d.status === 'distributed').length;
+        const daysCookedOrDist = appData.days.filter(d => d.status === 'cooked' || d.status === 'distributed' || d.status === 'cooking' || d.status === 'reported').length;
         const shortfall = totalCapacity - totalReceived;
 
         document.getElementById('dashboard-stats').innerHTML = `
@@ -2070,13 +2116,16 @@
             const todayTotal = todayDay.allocations.reduce((s, a) => s + a.qty, 0);
             const todayRemaining = cap - todayTotal;
             const todayPct = cap > 0 ? Math.min(Math.round(todayTotal / cap * 100), 100) : 0;
-            const statusLabel = todayDay.status === 'distributed' ? 'Distributed' : todayDay.status === 'cooked' ? 'Cooked' : 'Pending';
-            const statusColor = todayDay.status === 'distributed' ? 'var(--info)' : todayDay.status === 'cooked' ? 'var(--success)' : 'var(--warning)';
+            const todayStatusMap = { pending:'Scheduled', scheduled:'Scheduled', cooking:'Cooking', cooked:'Cooked', distributed:'Distributed', reported:'Reported' };
+            const todayColorMap = { pending:'var(--warning)', scheduled:'var(--warning)', cooking:'#e65100', cooked:'var(--success)', distributed:'var(--info)', reported:'#7b1fa2' };
+            const todayDisplayStatus = todayDay.status === 'pending' ? 'scheduled' : todayDay.status;
+            const statusLabel = todayStatusMap[todayDay.status] || todayDay.status;
+            const statusColor = todayColorMap[todayDay.status] || 'var(--warning)';
 
             let todayHtml = `<div class="card" style="border-left:4px solid ${statusColor};margin-bottom:16px">
                 <div class="card-title" style="margin-bottom:12px">
                     <span>Today's Schedule - Day ${todayDay.day}</span>
-                    <span class="badge badge-${todayDay.status}" style="font-size:0.75rem">${statusLabel}</span>
+                    <span class="badge badge-${todayDisplayStatus}" style="font-size:0.75rem">${statusLabel}</span>
                 </div>
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;flex-wrap:wrap;gap:4px">
                     <span style="font-size:0.88rem;color:var(--gray-700)">${dayName}, ${formatDate(todayDay.date)}</span>
@@ -2124,6 +2173,9 @@
 
             if (todayDay.notes) {
                 todayHtml += `<div style="margin-top:10px;padding:10px 14px;background:var(--accent-light);border-radius:8px;font-size:0.85rem"><strong>Notes:</strong> ${esc(todayDay.notes)}</div>`;
+            }
+            if (todayDay.mediaLink) {
+                todayHtml += `<div style="margin-top:8px;padding:10px 14px;background:#e3f2fd;border-radius:8px;font-size:0.85rem"><strong>Media:</strong> <a href="${esc(todayDay.mediaLink)}" target="_blank" style="color:#1565c0;word-break:break-all">${esc(todayDay.mediaLink)}</a></div>`;
             }
 
             todayHtml += `<div style="margin-top:12px;text-align:right">
@@ -2183,6 +2235,8 @@
                 if (a.contactPerson) line += ` <span style="color:var(--gray-400)">[${esc(a.contactPerson)}${a.contactNumber ? ': ' + esc(a.contactNumber) : ''}]</span>`;
                 return line;
             }).join('<br>') || '-';
+            const dStatus = day.status === 'pending' ? 'scheduled' : day.status;
+            const dStatusNames = { scheduled:'Scheduled', cooking:'Cooking', cooked:'Cooked', distributed:'Distributed', reported:'Reported', pending:'Scheduled' };
             return `<tr>
                 <td><strong>Day ${day.day}</strong></td>
                 <td>${formatDate(day.date)}</td>
@@ -2190,7 +2244,7 @@
                 <td>${planned.toLocaleString()}</td>
                 <td>${day.actualCooked.toLocaleString()}</td>
                 <td>${day.actualDistributed.toLocaleString()}</td>
-                <td><span class="badge badge-${day.status}">${day.status}</span></td>
+                <td><span class="badge badge-${dStatus}">${dStatusNames[dStatus] || dStatus}</span>${day.mediaLink ? ' <a href="' + esc(day.mediaLink) + '" target="_blank" style="font-size:0.7rem;color:var(--info)">Media</a>' : ''}</td>
                 <td><button class="btn btn-sm btn-outline" onclick="openDayModal(${day.day})">Update</button></td>
             </tr>`;
         }).join('');
@@ -2576,7 +2630,7 @@
             <div class="tv-stat-card"><div class="tv-stat-label">Planned Meals</div><div class="tv-stat-num gold" data-count="${total}">${total.toLocaleString()}</div></div>
             <div class="tv-stat-card"><div class="tv-stat-label">Cooked</div><div class="tv-stat-num green" data-count="${day.actualCooked || 0}">${(day.actualCooked || 0).toLocaleString()}</div></div>
             <div class="tv-stat-card"><div class="tv-stat-label">Distributed</div><div class="tv-stat-num blue" data-count="${day.actualDistributed || 0}">${(day.actualDistributed || 0).toLocaleString()}</div></div>
-            <div class="tv-stat-card"><div class="tv-stat-label">Status</div><div class="tv-status ${day.status}">${day.status.toUpperCase()}</div></div>
+            <div class="tv-stat-card"><div class="tv-stat-label">Status</div><div class="tv-status ${day.status === 'pending' ? 'scheduled' : day.status}">${(day.status === 'pending' ? 'SCHEDULED' : day.status.toUpperCase())}</div></div>
         </div>`;
 
         // Capacity progress bar
