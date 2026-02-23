@@ -763,6 +763,14 @@
                     <button class="btn btn-primary" style="flex:1;min-width:140px" onclick="saveSettings()">Save Settings</button>
                 </div>
             </div>
+            <div class="card">
+                <div class="card-title">
+                    <span>Auto Backups</span>
+                    <button class="btn btn-sm btn-outline" onclick="loadBackups()">Refresh</button>
+                </div>
+                <p style="font-size:0.82rem;color:var(--gray-500);margin-bottom:12px">Backups are created automatically every time data is saved. Last 20 backups are kept.</p>
+                <div id="backups-list" style="font-size:0.85rem;color:var(--gray-500);text-align:center;padding:12px">Loading...</div>
+            </div>
         </div>
     </div>
 
@@ -1032,7 +1040,50 @@
         alert('Settings saved!');
     }
 
-    // resetAllData removed - data protection
+    // ===================== BACKUPS =====================
+    async function loadBackups() {
+        const container = document.getElementById('backups-list');
+        try {
+            const res = await fetch('/api/backups');
+            const backups = await res.json();
+            if (backups.length === 0) {
+                container.innerHTML = '<div style="color:var(--gray-500);text-align:center;padding:12px">No backups yet. Backups are created when you save data.</div>';
+                return;
+            }
+            let html = '<div class="table-wrap"><table><thead><tr><th>Date & Time</th><th>Size</th><th></th></tr></thead><tbody>';
+            backups.forEach(b => {
+                const d = new Date(b.created);
+                const dateStr = d.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' }) + ' ' + d.toLocaleTimeString('en-GB', { hour:'2-digit', minute:'2-digit' });
+                const sizeKB = (b.size / 1024).toFixed(1) + ' KB';
+                html += `<tr>
+                    <td>${dateStr}</td>
+                    <td>${sizeKB}</td>
+                    <td><button class="btn btn-sm btn-outline" onclick="restoreBackup('${b.filename}')">Restore</button></td>
+                </tr>`;
+            });
+            html += '</tbody></table></div>';
+            container.innerHTML = html;
+        } catch (e) {
+            container.innerHTML = '<div style="color:var(--gray-500);text-align:center;padding:12px">Could not load backups.</div>';
+        }
+    }
+
+    async function restoreBackup(filename) {
+        if (!confirm('Restore this backup? Current data will be replaced with the backup data.')) return;
+        if (!confirm('Are you sure? This will overwrite all current settings and schedule data.')) return;
+        try {
+            const res = await fetch('/api/backups/restore/' + filename, { method: 'POST' });
+            const result = await res.json();
+            if (result.ok) {
+                alert('Backup restored successfully! Page will reload.');
+                location.reload();
+            } else {
+                alert('Restore failed: ' + (result.error || 'Unknown error'));
+            }
+        } catch (e) {
+            alert('Restore failed: ' + e.message);
+        }
+    }
 
     // ===================== NAVIGATION =====================
     document.querySelectorAll('.nav-tab').forEach(tab => {
@@ -2879,6 +2930,8 @@
         renderReports();
         renderUpdates();
         renderLiveDisplay();
+        const settingsPage = document.getElementById('page-settings');
+        if (settingsPage && settingsPage.classList.contains('active')) loadBackups();
     }
 
     // Modal handlers
