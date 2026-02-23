@@ -768,10 +768,9 @@
                     <label style="font-size:0.8rem;font-weight:600;color:var(--gray-700);display:block;margin-bottom:4px">Select Day</label>
                     <select id="expense-day-select" onchange="loadExpenseDay()" style="width:100%;padding:10px 12px;border:1.5px solid var(--gray-200);border-radius:6px;font-size:0.9rem"></select>
                 </div>
-                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:12px" id="expense-form-fields"></div>
-                <div style="margin-top:14px;display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-                    <button class="btn btn-primary" onclick="saveExpenseDay()">Save Expenses</button>
-                    <span id="expense-day-total" style="font-size:0.9rem;font-weight:700;color:var(--primary)"></span>
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px" id="expense-form-fields"></div>
+                <div style="margin-top:14px;text-align:right">
+                    <span id="expense-day-total" style="font-size:1.1rem;font-weight:700;color:var(--primary)"></span>
                 </div>
             </div>
 
@@ -1029,6 +1028,8 @@
             } else {
                 Object.keys(defaultExp).forEach(k => { if (d.expenses[k] === undefined) d.expenses[k] = 0; });
             }
+            if (!d.expenseItems) d.expenseItems = { groceries: [], accessories: [], equipment: [], transportMeals: [], transportStaff: [], distribution: [], staff: [] };
+            else { ['groceries','accessories','equipment','transportMeals','transportStaff','distribution','staff'].forEach(k => { if (!d.expenseItems[k]) d.expenseItems[k] = []; }); }
             if (!d.checklist) d.checklist = { ingredients: false, cooking: false, qualityCheck: false, packing: false, transport: false, distributed: false, cleanup: false, reported: false };
             if (d.status === undefined) d.status = 'pending';
             (d.allocations || []).forEach(a => {
@@ -1110,6 +1111,7 @@
                 notes: '',
                 mediaLink: '',
                 expenses: { groceries: 0, accessories: 0, equipment: 0, transportMeals: 0, transportStaff: 0, distribution: 0, staff: 0 },
+                expenseItems: { groceries: [], accessories: [], equipment: [], transportMeals: [], transportStaff: [], distribution: [], staff: [] },
                 checklist: { ingredients: false, cooking: false, qualityCheck: false, packing: false, transport: false, distributed: false, cleanup: false, reported: false },
                 locked: false
             });
@@ -2839,64 +2841,105 @@
     function loadExpenseDay() {
         const daySel = document.getElementById('expense-day-select');
         const fieldsEl = document.getElementById('expense-form-fields');
-        const totalEl = document.getElementById('expense-day-total');
         if (!daySel || !fieldsEl) return;
 
         const dayNum = parseInt(daySel.value);
         const day = appData.days[dayNum - 1];
         if (!day) return;
         const exp = day.expenses || {};
+        const items = day.expenseItems || {};
 
-        fieldsEl.innerHTML = EXPENSE_FIELDS.map(f => `<div class="form-group">
-            <label style="display:flex;align-items:center;gap:6px">
-                <span style="width:8px;height:8px;border-radius:50%;background:${f.color};display:inline-block"></span>
-                ${f.label}
-            </label>
-            <input type="number" id="exp-${f.key}" value="${exp[f.key] || 0}" min="0" placeholder="0" oninput="updateExpenseFormTotal()">
-        </div>`).join('');
+        let html = '';
+        EXPENSE_FIELDS.forEach(f => {
+            const catItems = items[f.key] || [];
+            const catTotal = catItems.reduce((s, it) => s + (it.amount || 0), 0);
+            html += `<div style="background:white;border:1.5px solid var(--gray-200);border-radius:8px;padding:12px;border-left:4px solid ${f.color}">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                    <strong style="font-size:0.85rem;display:flex;align-items:center;gap:6px">${f.label}</strong>
+                    <span style="font-weight:700;font-size:0.95rem;color:var(--primary)" id="cat-total-${f.key}">${catTotal.toLocaleString()}</span>
+                </div>`;
 
+            // Existing items list
+            if (catItems.length > 0) {
+                html += `<div style="margin-bottom:8px">`;
+                catItems.forEach((it, idx) => {
+                    html += `<div style="display:flex;align-items:center;gap:6px;padding:4px 0;border-bottom:1px solid var(--gray-100);font-size:0.82rem">
+                        <span style="flex:1">${esc(it.name)}</span>
+                        <span style="font-weight:600;min-width:60px;text-align:right">${(it.amount || 0).toLocaleString()}</span>
+                        <button onclick="removeExpenseItem(${dayNum},'${f.key}',${idx})" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:1rem;padding:0 4px">&times;</button>
+                    </div>`;
+                });
+                html += `</div>`;
+            }
+
+            // Add item form
+            html += `<div style="display:flex;gap:6px;align-items:center">
+                <input type="text" id="item-name-${f.key}" placeholder="Item name" style="flex:1;padding:6px 8px;border:1.5px solid var(--gray-200);border-radius:4px;font-size:0.82rem">
+                <input type="number" id="item-amt-${f.key}" placeholder="Amount" min="0" style="width:80px;padding:6px 8px;border:1.5px solid var(--gray-200);border-radius:4px;font-size:0.82rem;text-align:right">
+                <button class="btn btn-sm btn-primary" onclick="addExpenseItem(${dayNum},'${f.key}')" style="padding:6px 10px">+</button>
+            </div>
+            </div>`;
+        });
+
+        fieldsEl.innerHTML = html;
         updateExpenseFormTotal();
+    }
+
+    function addExpenseItem(dayNum, category) {
+        const day = appData.days[dayNum - 1];
+        if (!day) return;
+        const nameEl = document.getElementById('item-name-' + category);
+        const amtEl = document.getElementById('item-amt-' + category);
+        if (!nameEl || !amtEl) return;
+        const name = nameEl.value.trim();
+        const amount = parseFloat(amtEl.value) || 0;
+        if (!name || amount <= 0) return alert('Enter item name and amount');
+
+        if (!day.expenseItems) day.expenseItems = { groceries: [], accessories: [], equipment: [], transportMeals: [], transportStaff: [], distribution: [], staff: [] };
+        if (!day.expenseItems[category]) day.expenseItems[category] = [];
+        day.expenseItems[category].push({ name, amount });
+
+        // Recalculate category total from items
+        if (!day.expenses || typeof day.expenses === 'number') {
+            day.expenses = { groceries: 0, accessories: 0, equipment: 0, transportMeals: 0, transportStaff: 0, distribution: 0, staff: 0 };
+        }
+        day.expenses[category] = day.expenseItems[category].reduce((s, it) => s + (it.amount || 0), 0);
+
+        saveData();
+        loadExpenseDay();
+        renderExpenseStats();
+        renderExpenseLog();
+        renderDashboardExpenses();
+    }
+
+    function removeExpenseItem(dayNum, category, idx) {
+        const day = appData.days[dayNum - 1];
+        if (!day || !day.expenseItems || !day.expenseItems[category]) return;
+        day.expenseItems[category].splice(idx, 1);
+
+        // Recalculate category total
+        if (!day.expenses || typeof day.expenses === 'number') {
+            day.expenses = { groceries: 0, accessories: 0, equipment: 0, transportMeals: 0, transportStaff: 0, distribution: 0, staff: 0 };
+        }
+        day.expenses[category] = day.expenseItems[category].reduce((s, it) => s + (it.amount || 0), 0);
+
+        saveData();
+        loadExpenseDay();
+        renderExpenseStats();
+        renderExpenseLog();
+        renderDashboardExpenses();
     }
 
     function updateExpenseFormTotal() {
         const totalEl = document.getElementById('expense-day-total');
         if (!totalEl) return;
-        let total = 0;
-        EXPENSE_FIELDS.forEach(f => {
-            const el = document.getElementById('exp-' + f.key);
-            if (el) total += parseFloat(el.value) || 0;
-        });
-        totalEl.textContent = 'Day Total: ' + total.toLocaleString();
-    }
-
-    function saveExpenseDay() {
         const daySel = document.getElementById('expense-day-select');
         if (!daySel) return;
         const dayNum = parseInt(daySel.value);
         const day = appData.days[dayNum - 1];
         if (!day) return;
-
-        if (!day.expenses || typeof day.expenses === 'number') {
-            day.expenses = { groceries: 0, accessories: 0, equipment: 0, transportMeals: 0, transportStaff: 0, distribution: 0, staff: 0 };
-        }
-
-        EXPENSE_FIELDS.forEach(f => {
-            const el = document.getElementById('exp-' + f.key);
-            if (el) day.expenses[f.key] = parseFloat(el.value) || 0;
-        });
-
-        saveData();
-        renderExpenseStats();
-        renderExpenseLog();
-        renderDashboardExpenses();
-
-        // Show saved confirmation
-        const totalEl = document.getElementById('expense-day-total');
-        if (totalEl) {
-            const total = getExpenseTotal(day.expenses);
-            totalEl.innerHTML = 'Day Total: ' + total.toLocaleString() + ' <span style="color:var(--success);font-size:0.8rem;margin-left:8px">Saved!</span>';
-            setTimeout(() => updateExpenseFormTotal(), 2000);
-        }
+        const total = getExpenseTotal(day.expenses);
+        totalEl.textContent = 'Day Total: ' + total.toLocaleString();
     }
 
     function renderExpenseStats() {
@@ -2937,14 +2980,33 @@
         let rowsHtml = '';
         appData.days.forEach(day => {
             const exp = day.expenses || {};
+            const items = day.expenseItems || {};
             const dayTotal = getExpenseTotal(exp);
             if (dayTotal === 0) return;
-            rowsHtml += `<tr style="cursor:pointer" onclick="document.getElementById('expense-day-select').value=${day.day};loadExpenseDay();">
+
+            // Check if any items exist
+            const hasItems = EXPENSE_FIELDS.some(f => (items[f.key] || []).length > 0);
+
+            rowsHtml += `<tr style="cursor:pointer" onclick="document.getElementById('expense-day-select').value=${day.day};loadExpenseDay();window.scrollTo({top:0,behavior:'smooth'});">
                 <td style="font-weight:600;white-space:nowrap">Day ${day.day}</td>
                 <td style="white-space:nowrap;font-size:0.8rem">${formatDate(day.date)}</td>
                 ${EXPENSE_FIELDS.map(f => `<td style="text-align:right;${exp[f.key] > 0 ? 'font-weight:600' : 'color:var(--gray-300)'}">${exp[f.key] > 0 ? exp[f.key].toLocaleString() : '-'}</td>`).join('')}
                 <td style="font-weight:700;text-align:right;color:var(--primary)">${dayTotal.toLocaleString()}</td>
             </tr>`;
+
+            // Detail row with items
+            if (hasItems) {
+                let detailHtml = '<div style="display:flex;flex-wrap:wrap;gap:10px">';
+                EXPENSE_FIELDS.forEach(f => {
+                    const catItems = items[f.key] || [];
+                    if (catItems.length === 0) return;
+                    detailHtml += `<div style="font-size:0.78rem;min-width:120px"><strong style="color:${f.color}">${f.label}:</strong> `;
+                    detailHtml += catItems.map(it => `${esc(it.name)} (${it.amount.toLocaleString()})`).join(', ');
+                    detailHtml += `</div>`;
+                });
+                detailHtml += '</div>';
+                rowsHtml += `<tr><td colspan="10" style="padding:4px 12px 8px;background:var(--gray-50);border-bottom:2px solid var(--gray-200)">${detailHtml}</td></tr>`;
+            }
         });
 
         if (rowsHtml === '') {
