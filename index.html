@@ -618,7 +618,6 @@
                     <span id="daily-plan-title"></span>
                     <div style="display:flex;gap:6px;flex-wrap:wrap;justify-content:center">
                         <button class="btn btn-sm btn-primary" onclick="autoSchedule()">Auto-Schedule</button>
-                        <button class="btn btn-sm btn-outline" onclick="clearAllocations()">Clear All</button>
                     </div>
                 </div>
                 <p style="font-size:0.82rem;color:var(--gray-500);margin-bottom:14px" id="daily-plan-desc"></p>
@@ -762,7 +761,6 @@
                 </div>
                 <div style="margin-top:20px;display:flex;gap:10px;flex-wrap:wrap;justify-content:center">
                     <button class="btn btn-primary" style="flex:1;min-width:140px" onclick="saveSettings()">Save Settings</button>
-                    <button class="btn btn-danger" style="flex:1;min-width:140px" onclick="resetAllData()">Reset All Data</button>
                 </div>
             </div>
         </div>
@@ -1034,14 +1032,7 @@
         alert('Settings saved!');
     }
 
-    function resetAllData() {
-        if (!confirm('Delete ALL data? This cannot be undone.')) return;
-        if (!confirm('Really reset everything?')) return;
-        localStorage.removeItem('ifthar_app_data');
-        localStorage.removeItem('ifthar_settings');
-        fetch('/api/data', { method: 'DELETE' }).catch(() => {});
-        location.reload();
-    }
+    // resetAllData removed - data protection
 
     // ===================== NAVIGATION =====================
     document.querySelectorAll('.nav-tab').forEach(tab => {
@@ -1608,19 +1599,7 @@
         alert(msg);
     }
 
-    function clearAllocations() {
-        if (!confirm('Clear future day allocations? Today and past days will not be affected.')) return;
-        const now = new Date();
-        const todayStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
-        appData.days.forEach(d => {
-            if (d.date > todayStr && d.status === 'pending') {
-                d.allocations = [];
-                d.locked = false;
-            }
-        });
-        saveData();
-        refresh();
-    }
+    // clearAllocations removed - data protection
 
     // ===================== DAYS GRID =====================
     function renderDaysGrid() {
@@ -2303,15 +2282,7 @@
         } catch (e) {}
     }
 
-    async function deleteAllUpdates() {
-        if (!confirm('Delete ALL updates? This cannot be undone.')) return;
-        try {
-            for (const u of _updatesCache) {
-                await fetch('/api/updates/' + u.id, { method: 'DELETE' });
-            }
-            await fetchAndRenderUpdates();
-        } catch (e) {}
-    }
+    // deleteAllUpdates removed - data protection
 
     function openPhotoLightbox(src) {
         const lb = document.createElement('div');
@@ -2381,7 +2352,7 @@
 
         let html = '<div class="upd-feed-header">';
         html += '<span class="upd-feed-count">' + filtered.length + ' update' + (filtered.length !== 1 ? 's' : '') + '</span>';
-        html += '<button class="upd-feed-clear" onclick="deleteAllUpdates()">Clear All</button>';
+        html += '';
         html += '</div>';
 
         filtered.forEach(u => {

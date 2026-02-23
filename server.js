@@ -96,16 +96,7 @@ app.post('/api/data', (req, res) => {
     }
 });
 
-// DELETE /api/data - reset all
-app.delete('/api/data', (req, res) => {
-    try {
-        if (fs.existsSync(SETTINGS_FILE)) fs.unlinkSync(SETTINGS_FILE);
-        if (fs.existsSync(APPDATA_FILE)) fs.unlinkSync(APPDATA_FILE);
-        res.json({ ok: true });
-    } catch (e) {
-        res.status(500).json({ error: e.message });
-    }
-});
+// DELETE /api/data - disabled for data protection
 
 // ===================== UPDATES API =====================
 
