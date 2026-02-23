@@ -576,6 +576,15 @@
                     </table>
                 </div>
             </div>
+            <div class="card" id="dashboard-expenses-card">
+                <div class="card-title">
+                    <span>Expenses Overview</span>
+                    <select id="dashboard-expense-day" onchange="renderDashboardExpenses()" style="padding:6px 10px;border:1.5px solid var(--gray-200);border-radius:6px;font-size:0.82rem">
+                        <option value="all">All Days</option>
+                    </select>
+                </div>
+                <div id="dashboard-expenses-content"></div>
+            </div>
         </div>
 
         <!-- ORGANIZATIONS -->
@@ -1869,8 +1878,14 @@
         const remaining = cap - total;
         const maxExtra = 100;
         const overCap = total - cap;
+        const todayStr = new Date().toISOString().split('T')[0];
+        const allocLocked = day.date <= todayStr; // Lock allocations for today and past days
 
-        let html = `<div style="margin-bottom:14px">
+        let html = '';
+        if (allocLocked) {
+            html += `<div style="padding:8px 12px;background:#fff3cd;border:1px solid #ffc107;border-radius:8px;margin-bottom:12px;font-size:0.82rem;display:flex;align-items:center;gap:8px"><span>&#128274;</span> <span>Allocations are locked for today and past days. Other details can still be edited.</span></div>`;
+        }
+        html += `<div style="margin-bottom:14px">
             <div style="display:flex;justify-content:space-between;font-size:0.85rem;margin-bottom:4px">
                 <span>Allocated: <strong>${total.toLocaleString()}</strong> / ${cap.toLocaleString()}</span>
                 <span>Remaining: <strong style="color:${remaining <= 0 ? 'var(--success)' : remaining < cap/2 ? 'var(--warning)' : 'var(--danger)'}">${remaining > 0 ? remaining.toLocaleString() : 'Full'}</strong></span>
@@ -1892,7 +1907,7 @@
                     <td><input type="text" class="alloc-location" data-idx="${ai}" value="${esc(a.location || '')}" placeholder="Distribution point" style="padding:4px 8px;border:1.5px solid var(--gray-200);border-radius:4px;font-size:0.82rem;width:140px"></td>
                     <td><input type="text" class="alloc-contact" data-idx="${ai}" value="${esc(a.contactPerson || '')}" placeholder="Contact name" style="padding:4px 8px;border:1.5px solid var(--gray-200);border-radius:4px;font-size:0.82rem;width:120px"></td>
                     <td><input type="text" class="alloc-phone" data-idx="${ai}" value="${esc(a.contactNumber || '')}" placeholder="Phone" style="padding:4px 8px;border:1.5px solid var(--gray-200);border-radius:4px;font-size:0.82rem;width:110px"></td>
-                    <td><button class="btn btn-sm btn-danger" onclick="removeDayAlloc(${dayNum},'${a.orgId}')">Remove</button></td>
+                    <td>${allocLocked ? '' : `<button class="btn btn-sm btn-danger" onclick="removeDayAlloc(${dayNum},'${a.orgId}')">Remove</button>`}</td>
                 </tr>`;
             });
             html += `</tbody></table></div>`;
@@ -1901,7 +1916,7 @@
         const unallocatedOrgs = appData.organizations.filter(o => !day.allocations.find(a => a.orgId === o.id));
         const maxAllowed = cap + maxExtra;
         const canAdd = maxAllowed - total;
-        if (unallocatedOrgs.length > 0 && canAdd > 0) {
+        if (!allocLocked && unallocatedOrgs.length > 0 && canAdd > 0) {
             html += `<div style="margin-bottom:14px;padding:12px;background:var(--gray-50);border-radius:8px">
                 <strong style="font-size:0.85rem">Add Allocation:</strong>
                 <div class="form-row" style="margin-top:8px">
@@ -1993,6 +2008,8 @@
     function addDayAlloc(dayNum) {
         if (!settings) return;
         const day = appData.days[dayNum - 1];
+        const todayStr = new Date().toISOString().split('T')[0];
+        if (day.date <= todayStr) return alert('Allocations are locked for today and past days.');
         saveAllocInputs(dayNum);
         const orgId = document.getElementById('modal-alloc-org').value;
         const qty = parseInt(document.getElementById('modal-alloc-qty').value) || 0;
@@ -2011,6 +2028,8 @@
 
     function removeDayAlloc(dayNum, orgId) {
         const day = appData.days[dayNum - 1];
+        const todayStr = new Date().toISOString().split('T')[0];
+        if (day.date <= todayStr) return alert('Allocations are locked for today and past days.');
         saveAllocInputs(dayNum);  // Preserve existing input values
         day.allocations = day.allocations.filter(a => a.orgId !== orgId);
         day.locked = true;
@@ -2444,6 +2463,69 @@
                 </tr>`;
             }).join('');
         }
+    }
+
+    // ===================== DASHBOARD EXPENSES =====================
+    function renderDashboardExpenses() {
+        if (!settings || !appData) return;
+        const sel = document.getElementById('dashboard-expense-day');
+        const content = document.getElementById('dashboard-expenses-content');
+        if (!sel || !content) return;
+
+        // Populate day selector if not done yet
+        if (sel.options.length <= 1) {
+            sel.innerHTML = '<option value="all">All Days</option>' +
+                appData.days.map(d => `<option value="${d.day}">Day ${d.day} - ${formatDate(d.date)}</option>`).join('');
+        }
+
+        const selectedDay = sel.value;
+        const days = selectedDay === 'all' ? appData.days : appData.days.filter(d => d.day === parseInt(selectedDay));
+
+        const totals = {};
+        EXPENSE_FIELDS.forEach(f => { totals[f.key] = 0; });
+        let grandTotal = 0;
+
+        days.forEach(d => {
+            const exp = d.expenses || {};
+            EXPENSE_FIELDS.forEach(f => { totals[f.key] += (typeof exp === 'object' ? (exp[f.key] || 0) : 0); });
+            grandTotal += getExpenseTotal(exp);
+        });
+
+        if (grandTotal === 0 && selectedDay === 'all') {
+            content.innerHTML = '<div style="text-align:center;color:var(--gray-500);padding:12px;font-size:0.85rem">No expenses recorded yet. Go to the <a href="#" onclick="event.preventDefault();document.querySelector(\'[data-page=expenses]\').click()">Expenses tab</a> to add.</div>';
+            return;
+        }
+
+        let html = '<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(120px,1fr));gap:8px;margin-bottom:12px">';
+        html += `<div style="background:var(--primary-light);border-radius:8px;padding:10px;text-align:center">
+            <div style="font-size:0.68rem;color:var(--gray-500);text-transform:uppercase;font-weight:600">Total</div>
+            <div style="font-size:1.1rem;font-weight:700;color:var(--primary)">${grandTotal.toLocaleString()}</div>
+        </div>`;
+        EXPENSE_FIELDS.forEach(f => {
+            if (totals[f.key] > 0) {
+                html += `<div style="background:var(--gray-50);border-radius:8px;padding:10px;text-align:center;border-left:3px solid ${f.color}">
+                    <div style="font-size:0.68rem;color:var(--gray-500);text-transform:uppercase;font-weight:600">${f.label}</div>
+                    <div style="font-size:1rem;font-weight:700">${totals[f.key].toLocaleString()}</div>
+                </div>`;
+            }
+        });
+        html += '</div>';
+
+        // If viewing all days, show a mini bar chart of daily totals
+        if (selectedDay === 'all' && grandTotal > 0) {
+            const maxDay = Math.max(...appData.days.map(d => getExpenseTotal(d.expenses)));
+            html += '<div style="display:flex;align-items:flex-end;gap:2px;height:60px">';
+            appData.days.forEach(d => {
+                const t = getExpenseTotal(d.expenses);
+                const h = maxDay > 0 ? Math.round((t / maxDay) * 100) : 0;
+                html += `<div style="flex:1;display:flex;flex-direction:column;align-items:center" title="Day ${d.day}: ${t.toLocaleString()}">
+                    <div style="width:100%;background:${t > 0 ? 'var(--primary)' : 'var(--gray-200)'};border-radius:2px 2px 0 0;height:${Math.max(h, 2)}%;min-height:2px;opacity:0.7"></div>
+                </div>`;
+            });
+            html += '</div>';
+        }
+
+        content.innerHTML = html;
     }
 
     // ===================== DISTRIBUTION LOG =====================
@@ -3476,6 +3558,7 @@
     function refresh() {
         if (!settings) return;
         renderDashboard();
+        renderDashboardExpenses();
         renderOrganizations();
         renderDaysGrid();
         renderSchedule();
