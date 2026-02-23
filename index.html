@@ -778,21 +778,23 @@
                 <div class="table-wrap" style="margin-bottom:12px">
                     <table id="invoice-table" style="width:100%">
                         <thead><tr style="background:var(--gray-50)">
-                            <th style="width:40px;text-align:center">#</th>
-                            <th style="width:140px">Category</th>
+                            <th style="width:36px;text-align:center">#</th>
+                            <th style="width:130px">Category</th>
                             <th>Item Name</th>
-                            <th style="width:110px;text-align:right">Amount</th>
-                            <th style="width:40px"></th>
+                            <th style="width:90px;text-align:right">Rate</th>
+                            <th style="width:70px;text-align:center">Qty</th>
+                            <th style="width:100px;text-align:right">Total</th>
+                            <th style="width:36px"></th>
                         </tr></thead>
                         <tbody id="invoice-rows"></tbody>
                         <tfoot>
                             <tr>
-                                <td colspan="5" style="padding:8px">
+                                <td colspan="7" style="padding:8px">
                                     <button class="btn btn-sm" onclick="addInvoiceRow()" style="background:var(--gray-100);color:var(--gray-700);border:1.5px dashed var(--gray-300);width:100%;padding:8px;font-size:0.85rem">+ Add Item</button>
                                 </td>
                             </tr>
                             <tr style="background:var(--gray-50);font-weight:700">
-                                <td colspan="3" style="text-align:right;padding-right:12px">Invoice Total:</td>
+                                <td colspan="5" style="text-align:right;padding-right:12px">Invoice Total:</td>
                                 <td style="text-align:right;color:var(--primary);font-size:1.1rem" id="invoice-total">0</td>
                                 <td></td>
                             </tr>
@@ -2854,14 +2856,34 @@
         let rowsHtml = '';
         appData.days.forEach(day => {
             const exp = day.expenses || {};
+            const items = day.expenseItems || {};
             const dayTotal = getExpenseTotal(exp);
-            if (dayTotal === 0) return; // Skip days with no expenses
-            rowsHtml += `<tr style="cursor:pointer" onclick="document.getElementById('expense-day-select').value=${day.day};loadExpenseDay();">
+            if (dayTotal === 0) return;
+
+            const hasItems = EXPENSE_FIELDS.some(f => (items[f.key] || []).length > 0);
+
+            rowsHtml += `<tr style="cursor:pointer" onclick="document.getElementById('expense-day-select').value=${day.day};loadExpenseDay();window.scrollTo({top:0,behavior:'smooth'});">
                 <td style="font-weight:600;white-space:nowrap">Day ${day.day}</td>
                 <td style="white-space:nowrap;font-size:0.8rem">${formatDate(day.date)}</td>
                 ${EXPENSE_FIELDS.map(f => `<td style="text-align:right;${exp[f.key] > 0 ? 'font-weight:600' : 'color:var(--gray-300)'}">${exp[f.key] > 0 ? exp[f.key].toLocaleString() : '-'}</td>`).join('')}
                 <td style="font-weight:700;text-align:right;color:var(--primary)">${dayTotal.toLocaleString()}</td>
             </tr>`;
+
+            if (hasItems) {
+                let detailHtml = '<div style="display:flex;flex-wrap:wrap;gap:10px">';
+                EXPENSE_FIELDS.forEach(f => {
+                    const catItems = items[f.key] || [];
+                    if (catItems.length === 0) return;
+                    detailHtml += `<div style="font-size:0.78rem;min-width:120px"><strong style="color:${f.color}">${f.label}:</strong> `;
+                    detailHtml += catItems.map(it => {
+                        const rq = it.rate && it.qty ? ` [${it.rate}x${it.qty}]` : '';
+                        return `${esc(it.name)}${rq} (${(it.amount || 0).toLocaleString()})`;
+                    }).join(', ');
+                    detailHtml += `</div>`;
+                });
+                detailHtml += '</div>';
+                rowsHtml += `<tr><td colspan="10" style="padding:4px 12px 8px;background:var(--gray-50);border-bottom:2px solid var(--gray-200)">${detailHtml}</td></tr>`;
+            }
         });
 
         if (rowsHtml === '') {
@@ -2902,7 +2924,7 @@
 
         // Initialize invoice with empty rows if empty
         if (invoiceRows.length === 0) {
-            invoiceRows = [{ category: 'groceries', name: '', amount: '' }];
+            invoiceRows = [{ category: 'groceries', name: '', rate: '', qty: 1 }];
         }
         renderInvoiceRows();
     }
@@ -2913,6 +2935,7 @@
 
         let html = '';
         invoiceRows.forEach((row, idx) => {
+            const rowTotal = (parseFloat(row.rate) || 0) * (parseFloat(row.qty) || 0);
             html += `<tr>
                 <td style="text-align:center;color:var(--gray-500);font-size:0.85rem">${idx + 1}</td>
                 <td>
@@ -2924,7 +2947,13 @@
                     <input type="text" id="inv-name-${idx}" value="${esc(row.name)}" placeholder="Item name" onchange="updateInvoiceRow(${idx})" style="width:100%;padding:7px 8px;border:1.5px solid var(--gray-200);border-radius:4px;font-size:0.85rem">
                 </td>
                 <td>
-                    <input type="number" id="inv-amt-${idx}" value="${row.amount}" placeholder="0" min="0" onchange="updateInvoiceRow(${idx})" style="width:100%;padding:7px 8px;border:1.5px solid var(--gray-200);border-radius:4px;font-size:0.85rem;text-align:right">
+                    <input type="number" id="inv-rate-${idx}" value="${row.rate}" placeholder="0" min="0" oninput="updateInvoiceRow(${idx})" style="width:100%;padding:7px 8px;border:1.5px solid var(--gray-200);border-radius:4px;font-size:0.85rem;text-align:right">
+                </td>
+                <td>
+                    <input type="number" id="inv-qty-${idx}" value="${row.qty}" placeholder="1" min="1" oninput="updateInvoiceRow(${idx})" style="width:100%;padding:7px 8px;border:1.5px solid var(--gray-200);border-radius:4px;font-size:0.85rem;text-align:center">
+                </td>
+                <td style="text-align:right;font-weight:600;font-size:0.9rem;color:var(--primary);padding:7px 8px" id="inv-total-${idx}">
+                    ${rowTotal > 0 ? rowTotal.toLocaleString() : '-'}
                 </td>
                 <td style="text-align:center">
                     <button onclick="removeInvoiceRow(${idx})" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:1.1rem;padding:2px 6px" title="Remove">&times;</button>
@@ -2937,9 +2966,8 @@
     }
 
     function addInvoiceRow() {
-        invoiceRows.push({ category: 'groceries', name: '', amount: '' });
+        invoiceRows.push({ category: 'groceries', name: '', rate: '', qty: 1 });
         renderInvoiceRows();
-        // Focus the new row's name field
         setTimeout(() => {
             const nameEl = document.getElementById('inv-name-' + (invoiceRows.length - 1));
             if (nameEl) nameEl.focus();
@@ -2948,7 +2976,7 @@
 
     function removeInvoiceRow(idx) {
         if (invoiceRows.length <= 1) {
-            invoiceRows = [{ category: 'groceries', name: '', amount: '' }];
+            invoiceRows = [{ category: 'groceries', name: '', rate: '', qty: 1 }];
         } else {
             invoiceRows.splice(idx, 1);
         }
@@ -2958,10 +2986,18 @@
     function updateInvoiceRow(idx) {
         const catEl = document.getElementById('inv-cat-' + idx);
         const nameEl = document.getElementById('inv-name-' + idx);
-        const amtEl = document.getElementById('inv-amt-' + idx);
+        const rateEl = document.getElementById('inv-rate-' + idx);
+        const qtyEl = document.getElementById('inv-qty-' + idx);
         if (catEl) invoiceRows[idx].category = catEl.value;
         if (nameEl) invoiceRows[idx].name = nameEl.value;
-        if (amtEl) invoiceRows[idx].amount = amtEl.value;
+        if (rateEl) invoiceRows[idx].rate = rateEl.value;
+        if (qtyEl) invoiceRows[idx].qty = qtyEl.value;
+
+        // Update row total display
+        const rowTotal = (parseFloat(invoiceRows[idx].rate) || 0) * (parseFloat(invoiceRows[idx].qty) || 0);
+        const totalCell = document.getElementById('inv-total-' + idx);
+        if (totalCell) totalCell.textContent = rowTotal > 0 ? rowTotal.toLocaleString() : '-';
+
         updateInvoiceTotal();
     }
 
@@ -2969,12 +3005,14 @@
         const totalEl = document.getElementById('invoice-total');
         if (!totalEl) return;
         let total = 0;
-        invoiceRows.forEach(r => { total += parseFloat(r.amount) || 0; });
+        invoiceRows.forEach(r => {
+            total += (parseFloat(r.rate) || 0) * (parseFloat(r.qty) || 0);
+        });
         totalEl.textContent = total.toLocaleString();
     }
 
     function clearInvoice() {
-        invoiceRows = [{ category: 'groceries', name: '', amount: '' }];
+        invoiceRows = [{ category: 'groceries', name: '', rate: '', qty: 1 }];
         renderInvoiceRows();
     }
 
@@ -2986,8 +3024,12 @@
         if (!day) return;
 
         // Validate - at least one valid row
-        const validRows = invoiceRows.filter(r => r.name.trim() && (parseFloat(r.amount) || 0) > 0);
-        if (validRows.length === 0) return alert('Please add at least one item with name and amount.');
+        const validRows = invoiceRows.filter(r => {
+            const rate = parseFloat(r.rate) || 0;
+            const qty = parseFloat(r.qty) || 0;
+            return r.name.trim() && rate > 0 && qty > 0;
+        });
+        if (validRows.length === 0) return alert('Please add at least one item with name, rate and quantity.');
 
         // Ensure data structures exist
         if (!day.expenseItems) day.expenseItems = { groceries: [], accessories: [], equipment: [], transportMeals: [], transportStaff: [], distribution: [], staff: [] };
@@ -2998,8 +3040,11 @@
         // Add each valid row to the day's expense items
         validRows.forEach(r => {
             const cat = r.category;
+            const rate = parseFloat(r.rate) || 0;
+            const qty = parseFloat(r.qty) || 0;
+            const amount = rate * qty;
             if (!day.expenseItems[cat]) day.expenseItems[cat] = [];
-            day.expenseItems[cat].push({ name: r.name.trim(), amount: parseFloat(r.amount) || 0 });
+            day.expenseItems[cat].push({ name: r.name.trim(), rate, qty, amount });
         });
 
         // Recalculate category totals from items
@@ -3011,7 +3056,7 @@
         saveData();
 
         // Clear invoice form
-        invoiceRows = [{ category: 'groceries', name: '', amount: '' }];
+        invoiceRows = [{ category: 'groceries', name: '', rate: '', qty: 1 }];
         renderInvoiceRows();
 
         // Refresh all views
@@ -3060,8 +3105,10 @@
                     <span style="font-weight:700;color:var(--primary);font-size:0.9rem">${catTotal.toLocaleString()}</span>
                 </div>`;
             catItems.forEach((it, idx) => {
+                const rateQty = it.rate && it.qty ? `${it.rate} x ${it.qty}` : '';
                 html += `<div style="display:flex;align-items:center;gap:6px;padding:3px 0;font-size:0.82rem;border-bottom:1px solid var(--gray-100)">
                     <span style="flex:1">${esc(it.name)}</span>
+                    ${rateQty ? `<span style="color:var(--gray-500);font-size:0.78rem;min-width:70px;text-align:right">${rateQty}</span>` : ''}
                     <span style="font-weight:600;min-width:60px;text-align:right">${(it.amount || 0).toLocaleString()}</span>
                     <button onclick="removeExpenseItem(${dayNum},'${f.key}',${idx})" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:1rem;padding:0 4px" title="Remove">&times;</button>
                 </div>`;
