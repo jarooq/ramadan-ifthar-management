@@ -1727,6 +1727,7 @@
                     if (a.contactPerson) t += ' [' + a.contactPerson + (a.contactNumber ? ': ' + a.contactNumber : '') + ']';
                     return t;
                 }).join(', ') || 'No allocations'}</div>
+                ${total > cap ? `<div style="font-size:0.68rem;font-weight:700;color:#e65100;margin-top:3px">+${(total - cap).toLocaleString()} additional needed</div>` : ''}
                 <div class="day-status"><span class="badge badge-${displayStatus}">${statusNames[displayStatus] || displayStatus}</span>${day.mediaLink ? ' <a href="' + esc(day.mediaLink) + '" target="_blank" onclick="event.stopPropagation()" style="font-size:0.7rem;color:var(--info)">Media</a>' : ''}</div>
             </div>`;
         }).join('');
