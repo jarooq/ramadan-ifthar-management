@@ -4,6 +4,10 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Ifthar Project Management</title>
+    <link rel="manifest" href="/manifest.json">
+    <meta name="theme-color" content="#1a6b4a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
         :root {
@@ -29,7 +33,36 @@
             --shadow: 0 2px 8px rgba(0,0,0,0.08);
             --shadow-lg: 0 4px 20px rgba(0,0,0,0.12);
         }
-        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--gray-50); color: var(--gray-900); line-height: 1.5; }
+        /* Dark mode */
+        body.dark-mode {
+            --gray-50: #1a1a2e;
+            --gray-100: #252540;
+            --gray-200: #33334d;
+            --gray-300: #44446b;
+            --gray-500: #9ca3af;
+            --gray-700: #d1d5db;
+            --gray-900: #f3f4f6;
+            --primary-light: #1a3a2e;
+            --accent-light: #2a2518;
+            --danger-light: #2a1518;
+            --warning-light: #2a2518;
+            --shadow: 0 2px 8px rgba(0,0,0,0.3);
+            --shadow-lg: 0 4px 20px rgba(0,0,0,0.4);
+        }
+        body.dark-mode .card, body.dark-mode .stat-card { background: #1e1e36; }
+        body.dark-mode table th { background: #252540; }
+        body.dark-mode .form-group input, body.dark-mode .form-group select, body.dark-mode .form-group textarea { background: #252540; color: var(--gray-900); border-color: var(--gray-300); }
+        body.dark-mode .nav-tabs { background: #1e1e36; border-color: #33334d; }
+        body.dark-mode .nav-tab:hover { background: #252540; }
+        body.dark-mode .day-card { background: #1e1e36; }
+        body.dark-mode .modal .modal { background: #1e1e36; }
+        body.dark-mode .modal-overlay .modal { background: #1e1e36; }
+        body.dark-mode .btn-outline { background: #252540; color: var(--gray-700); border-color: var(--gray-300); }
+        body.dark-mode .upd-compose { background: #1e1e36; border-color: #33334d; }
+        body.dark-mode .status-pill { background: #252540; border-color: var(--gray-300); color: var(--gray-500); }
+        body.dark-mode .print-day { background: #1e1e36; }
+
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: var(--gray-50); color: var(--gray-900); line-height: 1.5; transition: background 0.3s, color 0.3s; }
         .header { background: linear-gradient(135deg, var(--primary-dark), var(--primary)); color: white; padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; box-shadow: var(--shadow-lg); position: sticky; top: 0; z-index: 100; }
         .header-left { display: flex; align-items: center; gap: 12px; }
         .header h1 { font-size: 1.3rem; font-weight: 700; }
@@ -505,6 +538,7 @@
             </div>
         </div>
         <div class="header-right no-print">
+            <button class="btn btn-outline" style="color:white;border-color:rgba(255,255,255,0.5);background:rgba(255,255,255,0.1);font-weight:600" onclick="toggleDarkMode()" id="dark-mode-btn" title="Toggle Dark Mode">&#9790;</button>
             <button class="btn btn-outline" style="color:white;border-color:rgba(255,255,255,0.5);background:rgba(255,255,255,0.1);font-weight:600" onclick="exportData()">Export</button>
             <button class="btn btn-outline" style="color:white;border-color:rgba(255,255,255,0.5);background:rgba(255,255,255,0.1);font-weight:600" onclick="importDataPrompt()">Import</button>
         </div>
@@ -637,6 +671,21 @@
                     </div>
                 </div>
                 <p style="font-size:0.82rem;color:var(--gray-500);margin-bottom:14px" id="daily-plan-desc"></p>
+                <div class="no-print" style="display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:14px">
+                    <input type="text" id="days-search" placeholder="Search day, org, location..." oninput="filterDays()" style="padding:8px 12px;border:1.5px solid var(--gray-200);border-radius:6px;font-size:0.85rem;flex:1;min-width:140px">
+                    <select id="days-status-filter" onchange="filterDays()" style="padding:8px 12px;border:1.5px solid var(--gray-200);border-radius:6px;font-size:0.85rem">
+                        <option value="">All Statuses</option>
+                        <option value="scheduled">Scheduled</option>
+                        <option value="cooking">Cooking</option>
+                        <option value="cooked">Cooked</option>
+                        <option value="distributed">Distributed</option>
+                        <option value="reported">Reported</option>
+                        <option value="empty">No Allocations</option>
+                    </select>
+                    <select id="days-org-filter" onchange="filterDays()" style="padding:8px 12px;border:1.5px solid var(--gray-200);border-radius:6px;font-size:0.85rem">
+                        <option value="">All Orgs</option>
+                    </select>
+                </div>
                 <div class="days-grid" id="days-grid"></div>
             </div>
         </div>
@@ -674,6 +723,21 @@
 
         <!-- REPORTS -->
         <div class="page" id="page-reports">
+            <div class="card no-print">
+                <div class="card-title">
+                    <span>Donor Reports</span>
+                </div>
+                <p style="font-size:0.82rem;color:var(--gray-500);margin-bottom:12px">Generate individual reports per donor organization for sharing.</p>
+                <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                    <select id="donor-report-org" style="padding:8px 12px;border:1.5px solid var(--gray-200);border-radius:6px;font-size:0.85rem;flex:1;min-width:160px">
+                        <option value="">-- Select Organization --</option>
+                    </select>
+                    <button class="btn btn-sm btn-primary" onclick="generateDonorReport()">Generate Report</button>
+                    <button class="btn btn-sm btn-outline" onclick="printDonorReport()">Print</button>
+                    <button class="btn btn-sm" style="background:#25D366;color:white" onclick="shareDonorReportWhatsApp()">WhatsApp</button>
+                </div>
+                <div id="donor-report-content" style="margin-top:16px"></div>
+            </div>
             <div class="card">
                 <div class="card-title">
                     <span id="report-title"></span>
@@ -906,6 +970,8 @@
             if (d.actualDistributed === undefined) d.actualDistributed = 0;
             if (d.notes === undefined) d.notes = '';
             if (d.mediaLink === undefined) d.mediaLink = '';
+            if (d.expenses === undefined) d.expenses = 0;
+            if (!d.checklist) d.checklist = { ingredients: false, cooking: false, qualityCheck: false, packing: false, transport: false, distributed: false, cleanup: false, reported: false };
             if (d.status === undefined) d.status = 'pending';
             (d.allocations || []).forEach(a => {
                 if (a.mediaOfficer === undefined) a.mediaOfficer = '';
@@ -985,6 +1051,8 @@
                 actualDistributed: 0,
                 notes: '',
                 mediaLink: '',
+                expenses: 0,
+                checklist: { ingredients: false, cooking: false, qualityCheck: false, packing: false, transport: false, distributed: false, cleanup: false, reported: false },
                 locked: false
             });
         }
@@ -1731,6 +1799,47 @@
                 <div class="day-status"><span class="badge badge-${displayStatus}">${statusNames[displayStatus] || displayStatus}</span>${day.mediaLink ? ' <a href="' + esc(day.mediaLink) + '" target="_blank" onclick="event.stopPropagation()" style="font-size:0.7rem;color:var(--info)">Media</a>' : ''}</div>
             </div>`;
         }).join('');
+
+        // Populate org filter dropdown
+        const orgFilter = document.getElementById('days-org-filter');
+        if (orgFilter && orgFilter.options.length <= 1) {
+            orgFilter.innerHTML = '<option value="">All Orgs</option>' +
+                appData.organizations.map(o => `<option value="${o.id}">${esc(o.name)}</option>`).join('');
+        }
+    }
+
+    function filterDays() {
+        const search = (document.getElementById('days-search').value || '').toLowerCase();
+        const statusFilter = document.getElementById('days-status-filter').value;
+        const orgFilter = document.getElementById('days-org-filter').value;
+        const cards = document.querySelectorAll('#days-grid .day-card');
+
+        cards.forEach((card, i) => {
+            const day = appData.days[i];
+            if (!day) return;
+            let show = true;
+            const displayStatus = day.status === 'pending' ? 'scheduled' : day.status;
+
+            // Status filter
+            if (statusFilter === 'empty') {
+                if (day.allocations.length > 0) show = false;
+            } else if (statusFilter && displayStatus !== statusFilter) {
+                show = false;
+            }
+
+            // Org filter
+            if (orgFilter && !day.allocations.some(a => a.orgId === orgFilter)) {
+                show = false;
+            }
+
+            // Text search
+            if (search && show) {
+                const text = `day ${day.day} ${day.date} ${day.allocations.map(a => a.orgName + ' ' + (a.location || '') + ' ' + (a.mediaOfficer || '') + ' ' + (a.contactPerson || '')).join(' ')} ${day.notes || ''}`.toLowerCase();
+                if (!text.includes(search)) show = false;
+            }
+
+            card.style.display = show ? '' : 'none';
+        });
     }
 
     // ===================== DAY MODAL =====================
@@ -1812,8 +1921,13 @@
                     <input type="number" id="modal-distributed" value="${day.actualDistributed}" min="0">
                 </div>
             </div>
-            <div class="form-group" style="margin-top:8px"><label>Notes</label>
-                <textarea id="modal-notes" rows="2" placeholder="Notes...">${esc(day.notes)}</textarea>
+            <div class="form-row" style="margin-top:8px">
+                <div class="form-group"><label>Notes</label>
+                    <textarea id="modal-notes" rows="2" placeholder="Notes...">${esc(day.notes)}</textarea>
+                </div>
+                <div class="form-group"><label>Expenses (Cost)</label>
+                    <input type="number" id="modal-expenses" value="${day.expenses || 0}" min="0" placeholder="0">
+                </div>
             </div>
             <div class="form-group" style="margin-top:8px"><label>Media Link</label>
                 <div style="display:flex;gap:6px">
@@ -1821,8 +1935,14 @@
                     ${day.mediaLink ? `<a href="${esc(day.mediaLink)}" target="_blank" class="btn btn-sm btn-outline">Open</a>` : ''}
                 </div>
             </div>
-            <div style="margin-top:10px">
+            <div style="margin-top:10px"><strong style="font-size:0.85rem">Daily Checklist:</strong>
+                <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:4px;margin-top:6px">
+                    ${[['ingredients','Ingredients Ready'],['cooking','Cooking Started'],['qualityCheck','Quality Check'],['packing','Packing Done'],['transport','Transport Ready'],['distributed','Distributed'],['cleanup','Cleanup Done'],['reported','Reported to Donor']].map(([k,l]) => `<label style="display:flex;align-items:center;gap:6px;font-size:0.82rem;padding:6px 8px;background:${day.checklist[k] ? '#e8f5ef' : 'white'};border:1px solid ${day.checklist[k] ? 'var(--primary)' : 'var(--gray-200)'};border-radius:6px;cursor:pointer"><input type="checkbox" class="day-checklist" data-key="${k}" ${day.checklist[k] ? 'checked' : ''} style="accent-color:var(--primary)"> ${l}</label>`).join('')}
+                </div>
+            </div>
+            <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
                 <button class="btn btn-success btn-sm" onclick="saveDayDetails(${dayNum})">Save Changes</button>
+                <button class="btn btn-sm" style="background:#25D366;color:white" onclick="shareWhatsApp(${dayNum})">Share WhatsApp</button>
             </div>
         </div>`;
 
@@ -1894,6 +2014,9 @@
         if (distEl) day.actualDistributed = parseInt(distEl.value) || 0;
         if (notesEl) day.notes = notesEl.value.trim();
         if (mediaEl) day.mediaLink = mediaEl.value.trim();
+        const expEl = document.getElementById('modal-expenses');
+        if (expEl) day.expenses = parseFloat(expEl.value) || 0;
+        document.querySelectorAll('.day-checklist').forEach(el => { day.checklist[el.dataset.key] = el.checked; });
         day.status = status;
         day.locked = true;
         saveData();
@@ -1924,10 +2047,57 @@
         day.actualDistributed = parseInt(document.getElementById('modal-distributed').value) || 0;
         day.notes = document.getElementById('modal-notes').value.trim();
         day.mediaLink = (document.getElementById('modal-medialink').value || '').trim();
+        day.expenses = parseFloat(document.getElementById('modal-expenses').value) || 0;
+        document.querySelectorAll('.day-checklist').forEach(el => { day.checklist[el.dataset.key] = el.checked; });
         day.locked = true;
         saveData();
         runScheduler();
         refresh(); closeModal();
+    }
+
+    // ===================== WHATSAPP SHARE =====================
+    function shareWhatsApp(dayNum) {
+        if (!settings) return;
+        const day = appData.days[dayNum - 1];
+        if (!day) return;
+        const cap = settings.dailyCapacity;
+        const total = day.allocations.reduce((s, a) => s + a.qty, 0);
+        const dayDate = new Date(day.date + 'T00:00:00');
+        const dayName = DAY_NAMES_FULL[dayDate.getDay()];
+        const statusNames = { scheduled:'Scheduled', cooking:'Cooking', cooked:'Cooked', distributed:'Distributed', reported:'Reported', pending:'Scheduled' };
+
+        let msg = `*${esc(settings.orgName)} - Ifthar Day ${day.day}*\n`;
+        msg += `${dayName}, ${formatDateLong(day.date)}\n`;
+        msg += `Status: ${statusNames[day.status] || day.status}\n\n`;
+        msg += `*Meals: ${total.toLocaleString()} / ${cap.toLocaleString()}*\n`;
+        if (total > cap) msg += `Additional needed: ${(total - cap).toLocaleString()}\n`;
+        msg += '\n';
+
+        if (day.allocations.length > 0) {
+            msg += `*Organizations:*\n`;
+            day.allocations.forEach(a => {
+                msg += `- ${a.orgName}: ${a.qty.toLocaleString()} meals`;
+                if (a.location) msg += ` @ ${a.location}`;
+                if (a.contactPerson) msg += ` (${a.contactPerson}${a.contactNumber ? ': ' + a.contactNumber : ''})`;
+                msg += '\n';
+            });
+        }
+
+        if (day.actualCooked > 0) msg += `\nCooked: ${day.actualCooked.toLocaleString()}`;
+        if (day.actualDistributed > 0) msg += `\nDistributed: ${day.actualDistributed.toLocaleString()}`;
+        if (day.expenses > 0) msg += `\nExpenses: ${day.expenses.toLocaleString()}`;
+        if (day.notes) msg += `\n\n_Notes: ${day.notes}_`;
+        if (day.mediaLink) msg += `\n\nMedia: ${day.mediaLink}`;
+
+        // Checklist summary
+        const checkItems = [['ingredients','Ingredients'],['cooking','Cooking'],['qualityCheck','Quality Check'],['packing','Packing'],['transport','Transport'],['distributed','Distributed'],['cleanup','Cleanup'],['reported','Reported']];
+        const done = checkItems.filter(([k]) => day.checklist && day.checklist[k]);
+        if (done.length > 0) {
+            msg += `\n\nChecklist (${done.length}/${checkItems.length}): ` + done.map(([,l]) => l).join(', ');
+        }
+
+        const url = 'https://wa.me/?text=' + encodeURIComponent(msg);
+        window.open(url, '_blank');
     }
 
     // ===================== PRINTABLE DAILY SCHEDULE =====================
@@ -2213,7 +2383,8 @@
                 todayHtml += `<div style="margin-top:8px;padding:10px 14px;background:#e3f2fd;border-radius:8px;font-size:0.85rem"><strong>Media:</strong> <a href="${esc(todayDay.mediaLink)}" target="_blank" style="color:#1565c0;word-break:break-all">${esc(todayDay.mediaLink)}</a></div>`;
             }
 
-            todayHtml += `<div style="margin-top:12px;text-align:right">
+            todayHtml += `<div style="margin-top:12px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
+                <button class="btn btn-sm btn-success" onclick="shareWhatsApp(${todayDay.day})" style="background:#25D366">Share WhatsApp</button>
                 <button class="btn btn-sm btn-primary" onclick="openDayModal(${todayDay.day})">Edit Today's Schedule</button>
             </div></div>`;
 
@@ -2294,7 +2465,8 @@
         const totalCapacity = cap * totalDays;
         const totalCooked = appData.days.reduce((s, d) => s + d.actualCooked, 0);
         const totalDistributed = appData.days.reduce((s, d) => s + d.actualDistributed, 0);
-        const daysCompleted = appData.days.filter(d => d.status === 'distributed').length;
+        const totalExpenses = appData.days.reduce((s, d) => s + (d.expenses || 0), 0);
+        const daysCompleted = appData.days.filter(d => d.status === 'distributed' || d.status === 'reported').length;
 
         let html = `<table style="margin-bottom:20px">
             <tr><td style="font-weight:600;padding:8px 16px 8px 0">Organization</td><td>${esc(settings.orgName)}</td></tr>
@@ -2303,6 +2475,7 @@
             <tr><td style="font-weight:600;padding:8px 16px 8px 0">Total Received</td><td>${totalReceived.toLocaleString()} meals</td></tr>
             <tr><td style="font-weight:600;padding:8px 16px 8px 0">Total Cooked</td><td>${totalCooked.toLocaleString()} meals</td></tr>
             <tr><td style="font-weight:600;padding:8px 16px 8px 0">Total Distributed</td><td>${totalDistributed.toLocaleString()} meals</td></tr>
+            ${totalExpenses > 0 ? `<tr><td style="font-weight:600;padding:8px 16px 8px 0">Total Expenses</td><td>${totalExpenses.toLocaleString()}</td></tr>` : ''}
             <tr><td style="font-weight:600;padding:8px 16px 8px 0">Days Completed</td><td>${daysCompleted} / ${totalDays}</td></tr>
             <tr><td style="font-weight:600;padding:8px 16px 8px 0">Coverage</td><td>${totalCapacity > 0 ? ((totalReceived / totalCapacity) * 100).toFixed(1) : 0}%</td></tr>
         </table>
@@ -2345,6 +2518,110 @@
         </table>`;
 
         document.getElementById('report-content').innerHTML = html;
+
+        // Populate donor report org selector
+        const donorSel = document.getElementById('donor-report-org');
+        if (donorSel) {
+            donorSel.innerHTML = '<option value="">-- Select Organization --</option>' +
+                appData.organizations.map(o => `<option value="${o.id}">${esc(o.name)}</option>`).join('');
+        }
+    }
+
+    // ===================== DONOR REPORT =====================
+    let _lastDonorReport = '';
+
+    function generateDonorReport() {
+        if (!settings) return;
+        const orgId = document.getElementById('donor-report-org').value;
+        if (!orgId) return alert('Please select an organization');
+        const org = appData.organizations.find(o => o.id === orgId);
+        if (!org) return;
+
+        const cap = settings.dailyCapacity;
+        const daysWithOrg = appData.days.filter(d => d.allocations.some(a => a.orgId === orgId));
+        const totalPlanned = daysWithOrg.reduce((s, d) => s + d.allocations.filter(a => a.orgId === orgId).reduce((ss, a) => ss + a.qty, 0), 0);
+        const totalExpenses = daysWithOrg.reduce((s, d) => s + (d.expenses || 0), 0);
+        const completedDays = daysWithOrg.filter(d => d.status === 'distributed' || d.status === 'reported');
+        const totalCooked = completedDays.reduce((s, d) => s + d.actualCooked, 0);
+        const totalDistributed = completedDays.reduce((s, d) => s + d.actualDistributed, 0);
+
+        let html = `<div style="border:1px solid var(--gray-200);border-radius:8px;padding:16px" id="donor-report-printable">
+            <div style="text-align:center;margin-bottom:16px">
+                <h3 style="font-size:1.1rem;color:var(--primary)">${esc(settings.orgName)}</h3>
+                <div style="font-size:0.85rem;color:var(--gray-500)">Donor Report for <strong>${esc(org.name)}</strong></div>
+                <div style="font-size:0.75rem;color:var(--gray-500)">Generated: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</div>
+            </div>
+            <table style="margin-bottom:14px">
+                <tr><td style="font-weight:600;padding:6px 12px 6px 0">Total Meals Sponsored</td><td>${org.qty.toLocaleString()}</td></tr>
+                <tr><td style="font-weight:600;padding:6px 12px 6px 0">Days Allocated</td><td>${daysWithOrg.length}</td></tr>
+                <tr><td style="font-weight:600;padding:6px 12px 6px 0">Total Planned Meals</td><td>${totalPlanned.toLocaleString()}</td></tr>
+                <tr><td style="font-weight:600;padding:6px 12px 6px 0">Days Completed</td><td>${completedDays.length}</td></tr>
+                <tr><td style="font-weight:600;padding:6px 12px 6px 0">Total Cooked</td><td>${totalCooked.toLocaleString()}</td></tr>
+                <tr><td style="font-weight:600;padding:6px 12px 6px 0">Total Distributed</td><td>${totalDistributed.toLocaleString()}</td></tr>
+                ${totalExpenses > 0 ? `<tr><td style="font-weight:600;padding:6px 12px 6px 0">Total Expenses</td><td>${totalExpenses.toLocaleString()}</td></tr>` : ''}
+                <tr><td style="font-weight:600;padding:6px 12px 6px 0">Contact</td><td>${esc(org.contact || '-')} ${esc(org.phone || '')}</td></tr>
+            </table>
+            <h4 style="font-size:0.9rem;margin-bottom:8px">Day-by-Day Breakdown</h4>
+            <table>
+                <thead><tr><th>Day</th><th>Date</th><th>Meals</th><th>Location</th><th>Staff</th><th>Cooked</th><th>Distributed</th><th>Status</th></tr></thead>
+                <tbody>`;
+
+        daysWithOrg.forEach(day => {
+            const alloc = day.allocations.find(a => a.orgId === orgId);
+            if (!alloc) return;
+            const statusNames = { scheduled:'Scheduled', cooking:'Cooking', cooked:'Cooked', distributed:'Distributed', reported:'Reported', pending:'Scheduled' };
+            html += `<tr>
+                <td>Day ${day.day}</td>
+                <td>${formatDate(day.date)}</td>
+                <td>${alloc.qty.toLocaleString()}</td>
+                <td>${esc(alloc.location || '-')}</td>
+                <td>${esc(alloc.mediaOfficer || '-')}</td>
+                <td>${day.actualCooked.toLocaleString()}</td>
+                <td>${day.actualDistributed.toLocaleString()}</td>
+                <td><span class="badge badge-${day.status === 'pending' ? 'scheduled' : day.status}">${statusNames[day.status] || day.status}</span></td>
+            </tr>`;
+        });
+
+        html += `</tbody></table>
+            ${daysWithOrg.some(d => d.mediaLink) ? `<h4 style="font-size:0.9rem;margin:12px 0 6px">Media Links</h4><ul style="font-size:0.82rem">` + daysWithOrg.filter(d => d.mediaLink).map(d => `<li>Day ${d.day}: <a href="${esc(d.mediaLink)}" target="_blank">${esc(d.mediaLink)}</a></li>`).join('') + '</ul>' : ''}
+        </div>`;
+
+        document.getElementById('donor-report-content').innerHTML = html;
+
+        // Build WhatsApp text
+        _lastDonorReport = `*${settings.orgName} - Donor Report*\n*${org.name}*\n\n`;
+        _lastDonorReport += `Meals Sponsored: ${org.qty.toLocaleString()}\n`;
+        _lastDonorReport += `Days Allocated: ${daysWithOrg.length}\n`;
+        _lastDonorReport += `Days Completed: ${completedDays.length}\n`;
+        _lastDonorReport += `Total Cooked: ${totalCooked.toLocaleString()}\n`;
+        _lastDonorReport += `Total Distributed: ${totalDistributed.toLocaleString()}\n`;
+        if (totalExpenses > 0) _lastDonorReport += `Total Expenses: ${totalExpenses.toLocaleString()}\n`;
+        _lastDonorReport += '\n*Day Details:*\n';
+        daysWithOrg.forEach(day => {
+            const alloc = day.allocations.find(a => a.orgId === orgId);
+            if (!alloc) return;
+            _lastDonorReport += `Day ${day.day} (${formatDate(day.date)}): ${alloc.qty} meals - ${day.status}\n`;
+        });
+    }
+
+    function printDonorReport() {
+        const content = document.getElementById('donor-report-printable');
+        if (!content) return alert('Generate a report first');
+        const w = window.open('', '_blank');
+        w.document.write(`<!DOCTYPE html><html><head><style>
+            body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 20px; }
+            table { width: 100%; border-collapse: collapse; margin-bottom: 16px; }
+            th, td { padding: 8px 10px; border-bottom: 1px solid #ddd; text-align: left; font-size: 0.85rem; }
+            th { background: #f5f5f5; font-size: 0.75rem; text-transform: uppercase; }
+            .badge { padding: 2px 8px; border-radius: 10px; font-size: 0.7rem; font-weight: 600; }
+        </style></head><body>${content.innerHTML}</body></html>`);
+        w.document.close();
+        w.print();
+    }
+
+    function shareDonorReportWhatsApp() {
+        if (!_lastDonorReport) return alert('Generate a report first');
+        window.open('https://wa.me/?text=' + encodeURIComponent(_lastDonorReport), '_blank');
     }
 
     // ===================== UPDATES =====================
@@ -3000,6 +3277,19 @@
         event.target.value = '';
     }
 
+    // ===================== DARK MODE =====================
+    function toggleDarkMode() {
+        document.body.classList.toggle('dark-mode');
+        const isDark = document.body.classList.contains('dark-mode');
+        localStorage.setItem('ifthar_dark_mode', isDark ? '1' : '0');
+        document.getElementById('dark-mode-btn').innerHTML = isDark ? '&#9788;' : '&#9790;';
+    }
+    // Restore dark mode preference
+    if (localStorage.getItem('ifthar_dark_mode') === '1') {
+        document.body.classList.add('dark-mode');
+        document.getElementById('dark-mode-btn').innerHTML = '&#9788;';
+    }
+
     // ===================== HELPERS =====================
     function esc(str) { const d = document.createElement('div'); d.textContent = str; return d.innerHTML; }
     function formatDate(dateStr) {
@@ -3078,6 +3368,80 @@
             });
         }
     })();
+
+    // ===================== PWA SERVICE WORKER =====================
+    let _deferredInstallPrompt = null;
+    if ('serviceWorker' in navigator) {
+        navigator.serviceWorker.register('/sw.js').catch(() => {});
+    }
+    window.addEventListener('beforeinstallprompt', (e) => {
+        e.preventDefault();
+        _deferredInstallPrompt = e;
+        // Show install banner
+        const banner = document.createElement('div');
+        banner.id = 'pwa-install-banner';
+        banner.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--primary);color:white;padding:12px 20px;border-radius:12px;font-size:0.85rem;font-weight:600;z-index:9999;box-shadow:0 4px 20px rgba(0,0,0,0.3);display:flex;gap:12px;align-items:center';
+        banner.innerHTML = '<span>Install Ifthar App</span><button onclick="installPWA()" style="background:white;color:var(--primary);border:none;padding:6px 14px;border-radius:6px;font-weight:700;cursor:pointer;font-size:0.82rem">Install</button><button onclick="this.parentElement.remove()" style="background:transparent;color:white;border:none;cursor:pointer;font-size:1.2rem;padding:0 4px">&times;</button>';
+        document.body.appendChild(banner);
+    });
+    function installPWA() {
+        if (!_deferredInstallPrompt) return;
+        _deferredInstallPrompt.prompt();
+        _deferredInstallPrompt.userChoice.then(() => {
+            _deferredInstallPrompt = null;
+            const b = document.getElementById('pwa-install-banner');
+            if (b) b.remove();
+        });
+    }
+
+    // ===================== NOTIFICATION REMINDERS =====================
+    function checkUnplannedDays() {
+        if (!settings || !appData) return;
+        const today = new Date();
+        const todayStr = today.toISOString().split('T')[0];
+        const unplanned = appData.days.filter(d => {
+            if (d.date < todayStr) return false; // Skip past days
+            if (d.date === todayStr) return false; // Skip today
+            const dDate = new Date(d.date + 'T00:00:00');
+            const diffDays = Math.ceil((dDate - today) / (1000 * 60 * 60 * 24));
+            if (diffDays > 3) return false; // Only warn for next 3 days
+            return d.allocations.length === 0;
+        });
+        if (unplanned.length === 0) return;
+
+        // Show in alerts container on dashboard
+        const alertsEl = document.getElementById('alerts-container');
+        if (!alertsEl) return;
+        const existing = document.getElementById('unplanned-alert');
+        if (existing) existing.remove();
+
+        const alert = document.createElement('div');
+        alert.id = 'unplanned-alert';
+        alert.style.cssText = 'background:#fff3cd;border:1px solid #ffc107;border-radius:8px;padding:12px 16px;margin-bottom:12px;font-size:0.85rem;display:flex;align-items:center;gap:10px';
+        alert.innerHTML = `<span style="font-size:1.2rem">&#9888;</span><div><strong>Upcoming unplanned days!</strong> ${unplanned.map(d => 'Day ' + d.day + ' (' + formatDate(d.date) + ')').join(', ')} ${unplanned.length === 1 ? 'has' : 'have'} no allocations yet.</div><button onclick="this.parentElement.remove()" style="background:none;border:none;cursor:pointer;font-size:1.2rem;padding:0 4px;margin-left:auto">&times;</button>`;
+        alertsEl.prepend(alert);
+
+        // Browser notification
+        if ('Notification' in window && Notification.permission === 'granted') {
+            new Notification('Ifthar - Unplanned Days', {
+                body: `${unplanned.length} upcoming day(s) have no meal allocations: ${unplanned.map(d => 'Day ' + d.day).join(', ')}`,
+                icon: '/manifest.json'
+            });
+        }
+    }
+
+    // Request notification permission
+    if ('Notification' in window && Notification.permission === 'default') {
+        // Delay the request so it doesn't fire on first load
+        setTimeout(() => {
+            Notification.requestPermission();
+        }, 5000);
+    }
+
+    // Check for unplanned days every 60 seconds and on load
+    setTimeout(checkUnplannedDays, 3000);
+    setInterval(checkUnplannedDays, 60000);
+
     </script>
 </body>
 </html>
