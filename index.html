@@ -1065,24 +1065,7 @@
             if (s) {
                 const data = JSON.parse(s);
                 if (data.days && data.days.length > 0) {
-                    // Migrate orgs: ensure schedule fields exist
-                    (data.organizations || []).forEach(o => {
-                        if (!o.minPerDay) o.minPerDay = 100;
-                        if (!o.scheduleType) o.scheduleType = 'daily';
-                        if (!o.scheduleDays) o.scheduleDays = [];
-                        if (o.location === undefined) o.location = '';
-                        if (o.mediaOfficer === undefined) o.mediaOfficer = '';
-                    });
-                    // Migrate days: ensure fields exist
-                    (data.days || []).forEach(d => {
-                        if (d.location === undefined) d.location = '';
-                        if (d.mediaOfficer === undefined) d.mediaOfficer = '';
-                        if (d.locked === undefined) d.locked = false;
-                        (d.allocations || []).forEach(a => {
-                            if (a.contactPerson === undefined) a.contactPerson = '';
-                            if (a.contactNumber === undefined) a.contactNumber = '';
-                        });
-                    });
+                    migrateData(data);
                     return data;
                 }
             }
