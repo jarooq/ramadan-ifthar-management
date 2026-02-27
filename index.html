@@ -889,7 +889,9 @@
                     </table>
                 </div>
 
-                <div style="display:flex;gap:10px;justify-content:flex-end;align-items:center">
+                <div style="display:flex;gap:10px;justify-content:flex-end;align-items:center;flex-wrap:wrap">
+                    <button class="btn btn-sm" onclick="showAddCategoryModal()" style="background:var(--gray-100);color:var(--gray-700);border:1.5px dashed var(--gray-300)">+ Add Category</button>
+                    <div style="flex:1"></div>
                     <button class="btn btn-sm" onclick="clearInvoice()" style="background:var(--gray-100);color:var(--gray-700)">Clear</button>
                     <button class="btn btn-primary" onclick="submitExpenseInvoice()" style="padding:10px 28px;font-size:0.95rem;font-weight:600">Submit to Expenses</button>
                 </div>
@@ -921,12 +923,7 @@
                 </div>
                 <div class="table-wrap">
                     <table id="expenses-table">
-                        <thead><tr>
-                            <th>Day</th><th>Date</th>
-                            <th>Groceries</th><th>Vegetables</th><th>Accessories</th><th>Equipment</th>
-                            <th>Transport (Meals)</th><th>Transport (Staff)</th>
-                            <th>Distribution</th><th>Staff</th><th>Total</th>
-                        </tr></thead>
+                        <thead><tr id="expenses-table-head"></tr></thead>
                         <tbody></tbody>
                     </table>
                 </div>
@@ -1170,6 +1167,29 @@
         </div>
     </div>
 
+    <!-- Add Category Modal -->
+    <div class="modal-overlay" id="add-category-modal" style="display:none">
+        <div class="modal" style="max-width:400px">
+            <div class="modal-title"><span>Add Expense Category</span></div>
+            <div class="form-group" style="margin-bottom:12px">
+                <label>Category Name</label>
+                <input type="text" id="new-cat-name" placeholder="e.g. Fruits, Beverages, Rent" onkeydown="if(event.key==='Enter')confirmAddCategory()">
+            </div>
+            <div style="margin-bottom:16px">
+                <label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;cursor:pointer">
+                    <input type="checkbox" id="new-cat-stock" checked>
+                    Track in Stock Management
+                </label>
+                <span style="font-size:0.75rem;color:var(--gray-500);margin-left:28px">Enable for physical items (groceries, supplies). Disable for services (transport, wages).</span>
+            </div>
+            <div id="custom-cat-list" style="margin-bottom:12px"></div>
+            <div style="display:flex;gap:8px">
+                <button class="btn btn-outline" onclick="hideAddCategoryModal()" style="flex:1">Cancel</button>
+                <button class="btn btn-primary" onclick="confirmAddCategory()" style="flex:1">Add Category</button>
+            </div>
+        </div>
+    </div>
+
     <!-- Setup Modal -->
     <div class="modal-overlay" id="setupModal">
         <div class="modal">
@@ -1264,16 +1284,16 @@
             if (d.actualDistributed === undefined) d.actualDistributed = 0;
             if (d.notes === undefined) d.notes = '';
             if (d.mediaLink === undefined) d.mediaLink = '';
-            const defaultExp = { groceries: 0, vegetables: 0, accessories: 0, equipment: 0, transportMeals: 0, transportStaff: 0, distribution: 0, staff: 0 };
+            const defaultExp = Object.fromEntries(EXPENSE_FIELDS.map(f => [f.key, 0]));
             if (d.expenses === undefined || d.expenses === null) {
                 d.expenses = defaultExp;
             } else if (typeof d.expenses === 'number') {
                 d.expenses = Object.assign({}, defaultExp, { groceries: d.expenses });
             } else {
-                Object.keys(defaultExp).forEach(k => { if (d.expenses[k] === undefined) d.expenses[k] = 0; });
+                EXPENSE_FIELDS.forEach(f => { if (d.expenses[f.key] === undefined) d.expenses[f.key] = 0; });
             }
-            if (!d.expenseItems) d.expenseItems = { groceries: [], vegetables: [], accessories: [], equipment: [], transportMeals: [], transportStaff: [], distribution: [], staff: [] };
-            else { ['groceries','vegetables','accessories','equipment','transportMeals','transportStaff','distribution','staff'].forEach(k => { if (!d.expenseItems[k]) d.expenseItems[k] = []; }); }
+            if (!d.expenseItems) d.expenseItems = Object.fromEntries(EXPENSE_FIELDS.map(f => [f.key, []]));
+            else { EXPENSE_FIELDS.forEach(f => { if (!d.expenseItems[f.key]) d.expenseItems[f.key] = []; }); }
             if (!d.checklist) d.checklist = { ingredients: false, cooking: false, qualityCheck: false, packing: false, transport: false, distributed: false, cleanup: false, reported: false };
             if (d.status === undefined) d.status = 'pending';
             (d.allocations || []).forEach(a => {
@@ -1284,6 +1304,7 @@
             });
         });
         if (!data.stockIssued) data.stockIssued = [];
+        if (!data.customCategories) data.customCategories = [];
         return data;
     }
 
@@ -1297,6 +1318,11 @@
             localStorage.setItem('ifthar_settings', JSON.stringify(settings));
         }
         if (serverData && serverData.days && serverData.days.length > 0) {
+            if (!serverData.customCategories) serverData.customCategories = [];
+            // Load custom categories first so migrateData knows all fields
+            const tempCustom = serverData.customCategories || [];
+            EXPENSE_FIELDS = [...DEFAULT_EXPENSE_FIELDS, ...tempCustom];
+            STOCK_CATEGORIES = [...DEFAULT_STOCK_CATEGORIES, ...tempCustom.filter(c => c.isStock).map(c => c.key)];
             migrateData(serverData);
             appData = serverData;
             localStorage.setItem('ifthar_app_data', JSON.stringify(appData));
@@ -1369,8 +1395,8 @@
                 actualDistributed: 0,
                 notes: '',
                 mediaLink: '',
-                expenses: { groceries: 0, vegetables: 0, accessories: 0, equipment: 0, transportMeals: 0, transportStaff: 0, distribution: 0, staff: 0 },
-                expenseItems: { groceries: [], vegetables: [], accessories: [], equipment: [], transportMeals: [], transportStaff: [], distribution: [], staff: [] },
+                expenses: Object.fromEntries(EXPENSE_FIELDS.map(f => [f.key, 0])),
+                expenseItems: Object.fromEntries(EXPENSE_FIELDS.map(f => [f.key, []])),
                 checklist: { ingredients: false, cooking: false, qualityCheck: false, packing: false, transport: false, distributed: false, cleanup: false, reported: false },
                 locked: false
             });
@@ -1384,6 +1410,11 @@
             if (s) {
                 const data = JSON.parse(s);
                 if (data.days && data.days.length > 0) {
+                    // Load custom categories before migration
+                    if (data.customCategories && data.customCategories.length > 0) {
+                        EXPENSE_FIELDS = [...DEFAULT_EXPENSE_FIELDS, ...data.customCategories];
+                        STOCK_CATEGORIES = [...DEFAULT_STOCK_CATEGORIES, ...data.customCategories.filter(c => c.isStock).map(c => c.key)];
+                    }
                     migrateData(data);
                     return data;
                 }
@@ -3089,9 +3120,11 @@
     }
 
     // ===================== EXPENSES PAGE =====================
-    const EXPENSE_FIELDS = [
+    const DEFAULT_EXPENSE_FIELDS = [
         { key: 'groceries', label: 'Groceries', color: 'var(--success)' },
         { key: 'vegetables', label: 'Vegetables', color: '#2e7d32' },
+        { key: 'meat', label: 'Meat', color: '#b71c1c' },
+        { key: 'chicken', label: 'Chicken', color: '#d84315' },
         { key: 'accessories', label: 'Accessories', color: 'var(--info)' },
         { key: 'equipment', label: 'Equipment', color: 'var(--warning)' },
         { key: 'transportMeals', label: 'Transport (Meals)', color: '#e65100' },
@@ -3099,15 +3132,107 @@
         { key: 'distribution', label: 'Distribution', color: 'var(--primary)' },
         { key: 'staff', label: 'Staff', color: 'var(--danger)' }
     ];
-    const STOCK_CATEGORIES = ['groceries', 'vegetables', 'accessories', 'equipment'];
+    let EXPENSE_FIELDS = [...DEFAULT_EXPENSE_FIELDS];
+    const DEFAULT_STOCK_CATEGORIES = ['groceries', 'vegetables', 'meat', 'chicken', 'accessories', 'equipment'];
+    let STOCK_CATEGORIES = [...DEFAULT_STOCK_CATEGORIES];
+
+    const CATEGORY_COLORS = ['#c62828','#ad1457','#6a1b9a','#4527a0','#283593','#1565c0','#00838f','#00695c','#2e7d32','#558b2f','#9e9d24','#f9a825','#ff8f00','#ef6c00','#d84315','#4e342e','#37474f','#546e7a'];
+
+    function loadCustomCategories() {
+        const custom = (appData && appData.customCategories) || [];
+        // Rebuild EXPENSE_FIELDS from defaults + custom
+        EXPENSE_FIELDS = [...DEFAULT_EXPENSE_FIELDS, ...custom];
+        // Rebuild STOCK_CATEGORIES from defaults + custom stock ones
+        STOCK_CATEGORIES = [...DEFAULT_STOCK_CATEGORIES, ...custom.filter(c => c.isStock).map(c => c.key)];
+    }
+
+    function addCustomCategory(label, isStock) {
+        const key = label.toLowerCase().replace(/[^a-z0-9]/g, '');
+        if (!key || EXPENSE_FIELDS.some(f => f.key === key)) return alert('Category already exists or invalid name.');
+        const colorIdx = (DEFAULT_EXPENSE_FIELDS.length + ((appData.customCategories || []).length)) % CATEGORY_COLORS.length;
+        const newCat = { key, label, color: CATEGORY_COLORS[colorIdx], isStock: !!isStock };
+        if (!appData.customCategories) appData.customCategories = [];
+        appData.customCategories.push(newCat);
+        loadCustomCategories();
+        // Add to all existing days
+        appData.days.forEach(d => {
+            if (!d.expenses[key]) d.expenses[key] = 0;
+            if (!d.expenseItems[key]) d.expenseItems[key] = [];
+        });
+        saveData();
+        renderExpenses();
+        renderStock();
+    }
+
+    function removeCustomCategory(key) {
+        if (!appData.customCategories) return;
+        if (!confirm('Remove this custom category? Existing data in this category will be kept but hidden.')) return;
+        appData.customCategories = appData.customCategories.filter(c => c.key !== key);
+        loadCustomCategories();
+        saveData();
+        renderExpenses();
+        renderStock();
+    }
+
+    function showAddCategoryModal() {
+        const modal = document.getElementById('add-category-modal');
+        if (modal) {
+            modal.style.display = 'flex';
+            const inp = document.getElementById('new-cat-name');
+            if (inp) { inp.value = ''; inp.focus(); }
+            const chk = document.getElementById('new-cat-stock');
+            if (chk) chk.checked = true;
+            // Show existing custom categories
+            const listEl = document.getElementById('custom-cat-list');
+            const custom = (appData && appData.customCategories) || [];
+            if (listEl) {
+                if (custom.length > 0) {
+                    listEl.innerHTML = '<div style="font-size:0.8rem;font-weight:600;color:var(--gray-600);margin-bottom:6px">Custom Categories:</div>' +
+                        custom.map(c => `<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:var(--gray-50);border-radius:6px;margin-bottom:4px">
+                            <span style="width:10px;height:10px;border-radius:50%;background:${c.color};flex-shrink:0"></span>
+                            <span style="flex:1;font-size:0.85rem">${esc(c.label)}</span>
+                            ${c.isStock ? '<span style="font-size:0.7rem;background:#e8f5e9;color:#2e7d32;padding:1px 6px;border-radius:8px">Stock</span>' : ''}
+                            <button onclick="removeCustomCategory('${c.key}');showAddCategoryModal()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:1rem;padding:0 4px">&times;</button>
+                        </div>`).join('');
+                } else {
+                    listEl.innerHTML = '';
+                }
+            }
+        }
+    }
+
+    function hideAddCategoryModal() {
+        const modal = document.getElementById('add-category-modal');
+        if (modal) modal.style.display = 'none';
+    }
+
+    function confirmAddCategory() {
+        const nameEl = document.getElementById('new-cat-name');
+        const stockEl = document.getElementById('new-cat-stock');
+        if (!nameEl) return;
+        const name = nameEl.value.trim();
+        if (!name) return alert('Please enter a category name.');
+        addCustomCategory(name, stockEl ? stockEl.checked : false);
+        hideAddCategoryModal();
+    }
 
     function getExpenseTotal(exp) {
         if (!exp || typeof exp === 'number') return exp || 0;
         return EXPENSE_FIELDS.reduce((s, f) => s + (exp[f.key] || 0), 0);
     }
 
+    function renderExpenseTableHead() {
+        const headRow = document.getElementById('expenses-table-head');
+        if (!headRow) return;
+        headRow.innerHTML = '<th>Day</th><th>Date</th>' +
+            EXPENSE_FIELDS.map(f => `<th>${f.label}</th>`).join('') +
+            '<th>Total</th>';
+    }
+
     function renderExpenses() {
         if (!settings || !appData) return;
+        loadCustomCategories();
+        renderExpenseTableHead();
         const statsEl = document.getElementById('expenses-stats');
         const tbody = document.querySelector('#expenses-table tbody');
         const daySel = document.getElementById('expense-day-select');
@@ -3178,12 +3303,12 @@
                     detailHtml += `</div>`;
                 });
                 detailHtml += '</div>';
-                rowsHtml += `<tr><td colspan="11" style="padding:4px 12px 8px;background:var(--gray-50);border-bottom:2px solid var(--gray-200)">${detailHtml}</td></tr>`;
+                rowsHtml += `<tr><td colspan="${EXPENSE_FIELDS.length + 3}" style="padding:4px 12px 8px;background:var(--gray-50);border-bottom:2px solid var(--gray-200)">${detailHtml}</td></tr>`;
             }
         });
 
         if (rowsHtml === '') {
-            rowsHtml = '<tr><td colspan="11" style="text-align:center;color:var(--gray-500);padding:20px">No expenses recorded yet. Use the form above to add daily expenses.</td></tr>';
+            rowsHtml = `<tr><td colspan="${EXPENSE_FIELDS.length + 3}" style="text-align:center;color:var(--gray-500);padding:20px">No expenses recorded yet. Use the form above to add daily expenses.</td></tr>`;
         } else {
             // Grand total row
             rowsHtml += `<tr style="background:var(--gray-50);font-weight:700">
@@ -3337,9 +3462,9 @@
         if (validRows.length === 0) return alert('Please add at least one item with name, rate and quantity.');
 
         // Ensure data structures exist
-        if (!day.expenseItems) day.expenseItems = { groceries: [], vegetables: [], accessories: [], equipment: [], transportMeals: [], transportStaff: [], distribution: [], staff: [] };
+        if (!day.expenseItems) day.expenseItems = Object.fromEntries(EXPENSE_FIELDS.map(f => [f.key, []]));
         if (!day.expenses || typeof day.expenses === 'number') {
-            day.expenses = { groceries: 0, vegetables: 0, accessories: 0, equipment: 0, transportMeals: 0, transportStaff: 0, distribution: 0, staff: 0 };
+            day.expenses = Object.fromEntries(EXPENSE_FIELDS.map(f => [f.key, 0]));
         }
 
         // Add each valid row to the day's expense items
@@ -3436,7 +3561,7 @@
 
         // Recalculate category total
         if (!day.expenses || typeof day.expenses === 'number') {
-            day.expenses = { groceries: 0, vegetables: 0, accessories: 0, equipment: 0, transportMeals: 0, transportStaff: 0, distribution: 0, staff: 0 };
+            day.expenses = Object.fromEntries(EXPENSE_FIELDS.map(f => [f.key, 0]));
         }
         day.expenses[category] = day.expenseItems[category].reduce((s, it) => s + (it.amount || 0), 0);
 
@@ -3511,12 +3636,12 @@
                     detailHtml += `</div>`;
                 });
                 detailHtml += '</div>';
-                rowsHtml += `<tr><td colspan="11" style="padding:4px 12px 8px;background:var(--gray-50);border-bottom:2px solid var(--gray-200)">${detailHtml}</td></tr>`;
+                rowsHtml += `<tr><td colspan="${EXPENSE_FIELDS.length + 3}" style="padding:4px 12px 8px;background:var(--gray-50);border-bottom:2px solid var(--gray-200)">${detailHtml}</td></tr>`;
             }
         });
 
         if (rowsHtml === '') {
-            rowsHtml = '<tr><td colspan="11" style="text-align:center;color:var(--gray-500);padding:20px">No expenses recorded yet.</td></tr>';
+            rowsHtml = `<tr><td colspan="${EXPENSE_FIELDS.length + 3}" style="text-align:center;color:var(--gray-500);padding:20px">No expenses recorded yet.</td></tr>`;
         } else {
             rowsHtml += `<tr style="background:var(--gray-50);font-weight:700">
                 <td colspan="2">TOTAL</td>
@@ -3675,7 +3800,7 @@
                     if (amount <= 0 && qty <= 0) continue;
 
                     const day = dayMap[dayNum];
-                    if (!day.expenseItems) day.expenseItems = { groceries: [], vegetables: [], accessories: [], equipment: [], transportMeals: [], transportStaff: [], distribution: [], staff: [] };
+                    if (!day.expenseItems) day.expenseItems = Object.fromEntries(EXPENSE_FIELDS.map(f => [f.key, []]));
                     if (!day.expenseItems[catKey]) day.expenseItems[catKey] = [];
 
                     day.expenseItems[catKey].push({
@@ -3695,7 +3820,7 @@
                 // Recalculate category totals for all affected days
                 appData.days.forEach(day => {
                     if (!day.expenses || typeof day.expenses === 'number') {
-                        day.expenses = { groceries: 0, vegetables: 0, accessories: 0, equipment: 0, transportMeals: 0, transportStaff: 0, distribution: 0, staff: 0 };
+                        day.expenses = Object.fromEntries(EXPENSE_FIELDS.map(f => [f.key, 0]));
                     }
                     EXPENSE_FIELDS.forEach(f => {
                         const catItems = (day.expenseItems || {})[f.key] || [];
@@ -4558,6 +4683,10 @@
             if (resp.ok) {
                 const parsed = await resp.json();
                 if (parsed && parsed.days) {
+                    if (parsed.customCategories && parsed.customCategories.length > 0) {
+                        EXPENSE_FIELDS = [...DEFAULT_EXPENSE_FIELDS, ...parsed.customCategories];
+                        STOCK_CATEGORIES = [...DEFAULT_STOCK_CATEGORIES, ...parsed.customCategories.filter(c => c.isStock).map(c => c.key)];
+                    }
                     migrateData(parsed);
                     const newHash = JSON.stringify(parsed);
                     if (newHash !== _lastDataHash) {
@@ -4700,6 +4829,7 @@
     // Init - fetch shared data from server, then render
     (async function init() {
         await initFromServer();
+        loadCustomCategories();
         if (settings) { applySettings(); refresh(); }
         showSetupIfNeeded();
 
