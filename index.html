@@ -1271,8 +1271,11 @@
     const DEFAULT_EXPENSE_FIELDS = [
         { key: 'groceries', label: 'Groceries', color: 'var(--success)' },
         { key: 'vegetables', label: 'Vegetables', color: '#2e7d32' },
+        { key: 'fruits', label: 'Fruits', color: '#558b2f' },
         { key: 'meat', label: 'Meat', color: '#b71c1c' },
         { key: 'chicken', label: 'Chicken', color: '#d84315' },
+        { key: 'spices', label: 'Spices', color: '#f9a825' },
+        { key: 'drinks', label: 'Drinks', color: '#00838f' },
         { key: 'accessories', label: 'Accessories', color: 'var(--info)' },
         { key: 'equipment', label: 'Equipment', color: 'var(--warning)' },
         { key: 'transportMeals', label: 'Transport (Meals)', color: '#e65100' },
@@ -1281,7 +1284,7 @@
         { key: 'staff', label: 'Staff', color: 'var(--danger)' }
     ];
     let EXPENSE_FIELDS = [...DEFAULT_EXPENSE_FIELDS];
-    const DEFAULT_STOCK_CATEGORIES = ['groceries', 'vegetables', 'meat', 'chicken', 'accessories', 'equipment'];
+    const DEFAULT_STOCK_CATEGORIES = ['groceries', 'vegetables', 'fruits', 'meat', 'chicken', 'spices', 'drinks', 'accessories', 'equipment'];
     let STOCK_CATEGORIES = [...DEFAULT_STOCK_CATEGORIES];
 
     function migrateData(data) {
