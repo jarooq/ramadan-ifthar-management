@@ -864,14 +864,14 @@
                 <div class="table-wrap" style="margin-bottom:12px">
                     <table id="invoice-table" style="width:100%">
                         <thead><tr style="background:var(--gray-50)">
-                            <th style="width:36px;text-align:center">#</th>
-                            <th style="width:120px">Category</th>
-                            <th>Item Name</th>
-                            <th style="width:110px;text-align:right">Rate</th>
-                            <th style="width:100px;text-align:center">Qty</th>
-                            <th style="width:80px">Unit</th>
-                            <th style="width:90px;text-align:right">Total</th>
-                            <th style="width:36px"></th>
+                            <th style="width:30px;text-align:center">#</th>
+                            <th style="min-width:100px">Category</th>
+                            <th style="min-width:100px">Item Name</th>
+                            <th style="width:90px;text-align:right">Rate</th>
+                            <th style="width:70px;text-align:center">Qty</th>
+                            <th style="width:70px">Unit</th>
+                            <th style="width:80px;text-align:right">Total</th>
+                            <th style="width:30px"></th>
                         </tr></thead>
                         <tbody id="invoice-rows"></tbody>
                         <tfoot>
@@ -912,13 +912,15 @@
             <div class="card">
                 <div class="card-title">
                     <span>Expenses Log</span>
-                    <div style="display:flex;gap:6px;flex-wrap:wrap">
+                    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
                         <button class="btn btn-sm no-print" onclick="downloadExpensesExcel()" style="background:var(--success);color:white">Download Excel</button>
                         <label class="btn btn-sm no-print" style="background:var(--info);color:white;cursor:pointer;margin:0">
                             Upload Excel
                             <input type="file" accept=".csv,.xlsx,.xls" onchange="uploadExpensesFile(event)" style="display:none">
                         </label>
-                        <button class="btn btn-sm btn-primary no-print" onclick="printExpenses()">Print</button>
+                        <button class="btn btn-sm btn-primary no-print" onclick="printExpenses()">Print Log</button>
+                        <button class="btn btn-sm no-print" onclick="printDayExpenseReport()" style="background:var(--accent);color:white" title="Detailed report for selected day">Day Report</button>
+                        <button class="btn btn-sm no-print" onclick="printFullExpenseReport()" style="background:var(--primary-dark);color:white" title="Complete expense report for all days">Full Report</button>
                     </div>
                 </div>
                 <div class="table-wrap">
@@ -934,6 +936,15 @@
         <div class="page" id="page-stock">
             <!-- Stock Summary Cards -->
             <div class="stats-grid" id="stock-stats"></div>
+
+            <!-- Stock Day Report -->
+            <div class="card no-print" style="padding:12px 16px">
+                <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+                    <span style="font-size:0.85rem;font-weight:600;color:var(--gray-700)">Day Stock Report:</span>
+                    <select id="stock-report-day-select" style="padding:7px 10px;border:1.5px solid var(--gray-200);border-radius:6px;font-size:0.85rem;min-width:180px"></select>
+                    <button class="btn btn-sm" onclick="printDayStockReport()" style="background:var(--accent);color:white">Generate Day Report</button>
+                </div>
+            </div>
 
             <!-- Issue from Stock -->
             <div class="card">
@@ -971,7 +982,10 @@
             <div class="card">
                 <div class="card-title">
                     <span>Stock Inventory</span>
-                    <button class="btn btn-sm btn-primary no-print" onclick="printStock()">Print</button>
+                    <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+                        <button class="btn btn-sm btn-primary no-print" onclick="printStock()">Print Table</button>
+                        <button class="btn btn-sm no-print" onclick="printFullStockReport()" style="background:var(--primary-dark);color:white" title="Complete stock report for all days">Full Report</button>
+                    </div>
                 </div>
                 <div style="margin-bottom:10px">
                     <select id="stock-filter-cat" onchange="renderStockTable()" style="padding:7px 10px;border:1.5px solid var(--gray-200);border-radius:6px;font-size:0.85rem"></select>
@@ -3207,8 +3221,8 @@
         const headRow = document.getElementById('expenses-table-head');
         if (!headRow) return;
         headRow.innerHTML = '<th>Day</th><th>Date</th>' +
-            EXPENSE_FIELDS.map(f => `<th>${f.label}</th>`).join('') +
-            '<th>Total</th>';
+            EXPENSE_FIELDS.map(f => `<th style="text-align:right">${f.label}</th>`).join('') +
+            '<th style="text-align:right">Total</th>';
     }
 
     function renderExpenses() {
@@ -3634,28 +3648,170 @@
         tbody.innerHTML = rowsHtml;
     }
 
+    function openReportWindow(titleText, bodyHtml) {
+        const w = window.open('', '_blank');
+        w.document.write(`<!DOCTYPE html><html><head><style>
+            body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 20px; color: #333; }
+            h2 { text-align: center; margin-bottom: 4px; color: #1a6b4a; }
+            h3 { margin: 18px 0 6px; font-size: 1rem; color: #1a6b4a; border-bottom: 2px solid #1a6b4a; padding-bottom: 4px; }
+            h4 { margin: 14px 0 4px; font-size: 0.9rem; }
+            p.subtitle { text-align: center; color: #666; font-size: 0.85rem; margin-bottom: 16px; }
+            table { width: 100%; border-collapse: collapse; font-size: 0.8rem; margin-bottom: 14px; }
+            th { background: #f5f5f5; font-size: 0.7rem; text-transform: uppercase; padding: 8px 6px; border-bottom: 2px solid #ddd; }
+            td { padding: 6px; border-bottom: 1px solid #eee; }
+            .total-row { font-weight: 700; background: #f9f9f9; }
+            .cat-header { background: #e8f5ef; font-weight: 600; padding: 6px 8px; margin: 8px 0 4px; border-left: 3px solid #1a6b4a; font-size: 0.85rem; }
+            .summary-box { display: inline-block; background: #f5f5f5; padding: 6px 14px; border-radius: 6px; margin: 4px 6px 4px 0; font-size: 0.82rem; }
+            .summary-box strong { color: #1a6b4a; }
+            .text-right { text-align: right; }
+            .text-left { text-align: left; }
+            @media print { body { padding: 10px; } }
+        </style></head><body>
+        <h2>${esc(settings.orgName)}</h2>
+        <p class="subtitle">${titleText}<br>Generated: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
+        ${bodyHtml}
+        </body></html>`);
+        w.document.close();
+        setTimeout(() => w.print(), 300);
+    }
+
     function printExpenses() {
         if (!settings || !appData) return;
         const table = document.getElementById('expenses-table');
         if (!table) return;
-        const w = window.open('', '_blank');
-        w.document.write(`<!DOCTYPE html><html><head><style>
-            body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 20px; }
-            h2 { text-align: center; margin-bottom: 4px; }
-            p { text-align: center; color: #666; font-size: 0.85rem; margin-bottom: 16px; }
-            table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
-            th { background: #f5f5f5; font-size: 0.7rem; text-transform: uppercase; padding: 8px 6px; border-bottom: 2px solid #ddd; text-align: right; }
-            th:first-child, th:nth-child(2) { text-align: left; }
-            td { padding: 6px; border-bottom: 1px solid #eee; text-align: right; }
-            td:first-child, td:nth-child(2) { text-align: left; }
-            tr:last-child { font-weight: 700; background: #f9f9f9; }
-        </style></head><body>
-        <h2>${esc(settings.orgName)} - Expenses Report</h2>
-        <p>Generated: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
-        ${table.outerHTML}
-        </body></html>`);
-        w.document.close();
-        setTimeout(() => w.print(), 300);
+        openReportWindow('Expenses Log', table.outerHTML);
+    }
+
+    function printDayExpenseReport(dayNum) {
+        if (!settings || !appData) return;
+        if (!dayNum) {
+            const sel = document.getElementById('expense-day-select');
+            if (sel) dayNum = parseInt(sel.value);
+        }
+        const day = appData.days[(dayNum || 1) - 1];
+        if (!day) return;
+
+        const exp = day.expenses || {};
+        const items = day.expenseItems || {};
+        const dayTotal = getExpenseTotal(exp);
+
+        let summaryHtml = '<div style="margin-bottom:14px">';
+        summaryHtml += `<div class="summary-box"><strong>Day Total:</strong> ${dayTotal.toLocaleString()}</div>`;
+        EXPENSE_FIELDS.forEach(f => {
+            if ((exp[f.key] || 0) > 0) {
+                summaryHtml += `<div class="summary-box"><strong>${f.label}:</strong> ${exp[f.key].toLocaleString()}</div>`;
+            }
+        });
+        summaryHtml += '</div>';
+
+        let tablesHtml = '';
+        EXPENSE_FIELDS.forEach(f => {
+            const catItems = items[f.key] || [];
+            if (catItems.length === 0) return;
+            const catTotal = catItems.reduce((s, it) => s + (it.amount || 0), 0);
+
+            tablesHtml += `<div class="cat-header">${f.label} — ${catTotal.toLocaleString()}</div>`;
+            tablesHtml += `<table><thead><tr>
+                <th class="text-left" style="width:30px">#</th>
+                <th class="text-left">Item Name</th>
+                <th class="text-right">Rate</th><th class="text-right">Qty</th><th class="text-left">Unit</th><th class="text-right">Amount</th>
+            </tr></thead><tbody>`;
+            catItems.forEach((it, idx) => {
+                tablesHtml += `<tr>
+                    <td class="text-left">${idx + 1}</td>
+                    <td class="text-left">${esc(it.name)}</td>
+                    <td class="text-right">${(it.rate || 0).toLocaleString()}</td>
+                    <td class="text-right">${it.qty || ''}</td>
+                    <td class="text-left">${esc(it.unit || '')}</td>
+                    <td class="text-right">${(it.amount || 0).toLocaleString()}</td>
+                </tr>`;
+            });
+            tablesHtml += `<tr class="total-row"><td colspan="5" class="text-right">Category Total:</td><td class="text-right">${catTotal.toLocaleString()}</td></tr>`;
+            tablesHtml += '</tbody></table>';
+        });
+
+        if (!tablesHtml) {
+            tablesHtml = '<p style="color:#666;text-align:center;padding:20px">No expense items recorded for this day.</p>';
+        } else {
+            tablesHtml += `<div style="text-align:right;font-weight:700;font-size:1.1rem;margin-top:10px;border-top:2px solid #1a6b4a;padding-top:8px">Grand Total: ${dayTotal.toLocaleString()}</div>`;
+        }
+
+        openReportWindow(`Day ${day.day} Expense Report — ${formatDateLong(day.date)}`, summaryHtml + tablesHtml);
+    }
+
+    function printFullExpenseReport() {
+        if (!settings || !appData) return;
+
+        const totals = {};
+        EXPENSE_FIELDS.forEach(f => { totals[f.key] = 0; });
+        let grandTotal = 0;
+        const activeDays = [];
+
+        appData.days.forEach(day => {
+            const exp = day.expenses || {};
+            const dayTotal = getExpenseTotal(exp);
+            if (dayTotal === 0) return;
+            EXPENSE_FIELDS.forEach(f => { totals[f.key] += (exp[f.key] || 0); });
+            grandTotal += dayTotal;
+            activeDays.push(day);
+        });
+
+        let html = '<div style="margin-bottom:14px">';
+        html += `<div class="summary-box"><strong>Grand Total:</strong> ${grandTotal.toLocaleString()}</div>`;
+        html += `<div class="summary-box"><strong>Days with Expenses:</strong> ${activeDays.length}</div>`;
+        EXPENSE_FIELDS.forEach(f => {
+            if (totals[f.key] > 0) {
+                const pct = grandTotal > 0 ? ((totals[f.key] / grandTotal) * 100).toFixed(1) : 0;
+                html += `<div class="summary-box"><strong>${f.label}:</strong> ${totals[f.key].toLocaleString()} (${pct}%)</div>`;
+            }
+        });
+        html += '</div>';
+
+        html += '<h3>Summary by Day</h3>';
+        html += '<table><thead><tr><th class="text-left">Day</th><th class="text-left">Date</th>';
+        EXPENSE_FIELDS.forEach(f => { html += `<th class="text-right">${f.label}</th>`; });
+        html += '<th class="text-right">Total</th></tr></thead><tbody>';
+        activeDays.forEach(day => {
+            const exp = day.expenses || {};
+            const dayTotal = getExpenseTotal(exp);
+            html += `<tr><td class="text-left" style="font-weight:600">Day ${day.day}</td><td class="text-left">${formatDate(day.date)}</td>`;
+            EXPENSE_FIELDS.forEach(f => {
+                html += `<td class="text-right">${(exp[f.key] || 0) > 0 ? exp[f.key].toLocaleString() : '-'}</td>`;
+            });
+            html += `<td class="text-right" style="font-weight:700">${dayTotal.toLocaleString()}</td></tr>`;
+        });
+        html += `<tr class="total-row"><td colspan="2" class="text-left">TOTAL</td>`;
+        EXPENSE_FIELDS.forEach(f => { html += `<td class="text-right">${totals[f.key].toLocaleString()}</td>`; });
+        html += `<td class="text-right" style="font-weight:700">${grandTotal.toLocaleString()}</td></tr>`;
+        html += '</tbody></table>';
+
+        html += '<h3>Itemized Breakdown by Day</h3>';
+        activeDays.forEach(day => {
+            const exp = day.expenses || {};
+            const items = day.expenseItems || {};
+            const dayTotal = getExpenseTotal(exp);
+            const hasItems = EXPENSE_FIELDS.some(f => (items[f.key] || []).length > 0);
+            if (!hasItems) return;
+
+            html += `<h4>Day ${day.day} — ${formatDate(day.date)} (Total: ${dayTotal.toLocaleString()})</h4>`;
+            EXPENSE_FIELDS.forEach(f => {
+                const catItems = items[f.key] || [];
+                if (catItems.length === 0) return;
+                const catTotal = catItems.reduce((s, it) => s + (it.amount || 0), 0);
+                html += `<div class="cat-header">${f.label} — ${catTotal.toLocaleString()}</div>`;
+                html += '<table><thead><tr><th class="text-left" style="width:30px">#</th><th class="text-left">Item</th><th class="text-right">Rate</th><th class="text-right">Qty</th><th class="text-left">Unit</th><th class="text-right">Amount</th></tr></thead><tbody>';
+                catItems.forEach((it, idx) => {
+                    html += `<tr><td class="text-left">${idx+1}</td><td class="text-left">${esc(it.name)}</td><td class="text-right">${(it.rate||0).toLocaleString()}</td><td class="text-right">${it.qty||''}</td><td class="text-left">${esc(it.unit||'')}</td><td class="text-right">${(it.amount||0).toLocaleString()}</td></tr>`;
+                });
+                html += '</tbody></table>';
+            });
+        });
+
+        if (activeDays.length === 0) {
+            html = '<p style="color:#666;text-align:center;padding:20px">No expenses recorded yet.</p>';
+        }
+
+        openReportWindow('Complete Expense Report — All Days', html);
     }
 
     function downloadExpensesExcel() {
@@ -3884,6 +4040,29 @@
         return Object.values(stockMap);
     }
 
+    function getStockDataForDay(dayNum) {
+        const day = appData.days[(dayNum || 1) - 1];
+        if (!day) return { received: [], issued: [] };
+
+        const receivedMap = {};
+        const items = day.expenseItems || {};
+        STOCK_CATEGORIES.forEach(cat => {
+            (items[cat] || []).forEach(it => {
+                const key = cat + '|' + it.name.toLowerCase().trim();
+                if (!receivedMap[key]) {
+                    receivedMap[key] = { name: it.name.trim(), category: cat, unit: it.unit || '', qty: 0, amount: 0 };
+                }
+                receivedMap[key].qty += (it.qty || 0);
+                receivedMap[key].amount += (it.amount || 0);
+            });
+        });
+
+        const dayDate = day.date;
+        const issuedForDay = (appData.stockIssued || []).filter(iss => iss.date === dayDate);
+
+        return { received: Object.values(receivedMap), issued: issuedForDay };
+    }
+
     function populateStockDropdowns() {
         const issueCat = document.getElementById('stock-issue-cat');
         const filterCat = document.getElementById('stock-filter-cat');
@@ -3904,8 +4083,19 @@
         }
     }
 
+    function populateStockReportDaySelect() {
+        const sel = document.getElementById('stock-report-day-select');
+        if (!sel || !appData) return;
+        const now = new Date();
+        const todayStr = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0') + '-' + String(now.getDate()).padStart(2, '0');
+        sel.innerHTML = appData.days.map(d =>
+            `<option value="${d.day}"${d.date === todayStr ? ' selected' : ''}>Day ${d.day} - ${formatDate(d.date)}${d.date === todayStr ? ' (Today)' : ''}</option>`
+        ).join('');
+    }
+
     function renderStock() {
         populateStockDropdowns();
+        populateStockReportDaySelect();
         renderStockStats();
         renderStockTable();
         renderStockHistory();
@@ -4104,21 +4294,132 @@
         if (!settings || !appData) return;
         const table = document.getElementById('stock-table');
         if (!table) return;
-        const w = window.open('', '_blank');
-        w.document.write(`<!DOCTYPE html><html><head><style>
-            body { font-family: -apple-system, BlinkMacSystemFont, sans-serif; padding: 20px; }
-            h2 { text-align: center; margin-bottom: 4px; }
-            p { text-align: center; color: #666; font-size: 0.85rem; margin-bottom: 16px; }
-            table { width: 100%; border-collapse: collapse; font-size: 0.8rem; }
-            th { background: #f5f5f5; font-size: 0.7rem; text-transform: uppercase; padding: 8px 6px; border-bottom: 2px solid #ddd; }
-            td { padding: 6px; border-bottom: 1px solid #eee; }
-        </style></head><body>
-        <h2>${esc(settings.orgName)} - Stock Report</h2>
-        <p>Generated: ${new Date().toLocaleDateString('en-US', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}</p>
-        ${table.outerHTML}
-        </body></html>`);
-        w.document.close();
-        setTimeout(() => w.print(), 300);
+        openReportWindow('Stock Inventory', table.outerHTML);
+    }
+
+    function printDayStockReport(dayNum) {
+        if (!settings || !appData) return;
+        if (!dayNum) {
+            const sel = document.getElementById('stock-report-day-select');
+            if (sel) dayNum = parseInt(sel.value);
+        }
+        const day = appData.days[(dayNum || 1) - 1];
+        if (!day) return;
+
+        const data = getStockDataForDay(dayNum || 1);
+        const catLabels = {};
+        EXPENSE_FIELDS.forEach(f => { catLabels[f.key] = f.label; });
+
+        const totalRecQty = data.received.reduce((s, it) => s + it.qty, 0);
+        const totalRecAmt = data.received.reduce((s, it) => s + it.amount, 0);
+        const totalIssQty = data.issued.reduce((s, it) => s + (it.qty || 0), 0);
+
+        let html = '<div style="margin-bottom:14px">';
+        html += `<div class="summary-box"><strong>Items Received:</strong> ${data.received.length}</div>`;
+        html += `<div class="summary-box"><strong>Total Qty Received:</strong> ${totalRecQty.toLocaleString()}</div>`;
+        html += `<div class="summary-box"><strong>Purchase Amount:</strong> ${totalRecAmt.toLocaleString()}</div>`;
+        html += `<div class="summary-box"><strong>Issues Made:</strong> ${data.issued.length}</div>`;
+        html += `<div class="summary-box"><strong>Total Qty Issued:</strong> ${totalIssQty.toLocaleString()}</div>`;
+        html += '</div>';
+
+        html += '<h3>Stock Received (Purchases)</h3>';
+        if (data.received.length > 0) {
+            html += '<table><thead><tr><th class="text-left">#</th><th class="text-left">Item</th><th class="text-left">Category</th><th class="text-right">Qty</th><th class="text-left">Unit</th><th class="text-right">Amount</th></tr></thead><tbody>';
+            data.received.forEach((it, idx) => {
+                html += `<tr><td class="text-left">${idx+1}</td><td class="text-left" style="font-weight:600">${esc(it.name)}</td><td class="text-left">${catLabels[it.category]||it.category}</td><td class="text-right">${it.qty.toLocaleString()}</td><td class="text-left">${esc(it.unit)}</td><td class="text-right">${it.amount.toLocaleString()}</td></tr>`;
+            });
+            html += `<tr class="total-row"><td colspan="3" class="text-left">Total</td><td class="text-right">${totalRecQty.toLocaleString()}</td><td></td><td class="text-right">${totalRecAmt.toLocaleString()}</td></tr>`;
+            html += '</tbody></table>';
+        } else {
+            html += '<p style="color:#666;font-size:0.85rem">No stock received on this day.</p>';
+        }
+
+        html += '<h3>Stock Issued</h3>';
+        if (data.issued.length > 0) {
+            html += '<table><thead><tr><th class="text-left">Time</th><th class="text-left">Item</th><th class="text-left">Category</th><th class="text-right">Qty</th><th class="text-left">Unit</th><th class="text-left">Issued To</th><th class="text-left">Note</th></tr></thead><tbody>';
+            data.issued.forEach(iss => {
+                html += `<tr><td class="text-left">${iss.time||'-'}</td><td class="text-left" style="font-weight:600">${esc(iss.itemName)}</td><td class="text-left">${catLabels[iss.category]||iss.category}</td><td class="text-right">${iss.qty}</td><td class="text-left">${esc(iss.unit||'')}</td><td class="text-left">${esc(iss.issuedTo||'Kitchen')}</td><td class="text-left">${esc(iss.note||'-')}</td></tr>`;
+            });
+            html += `<tr class="total-row"><td colspan="3" class="text-left">Total Issued</td><td class="text-right">${totalIssQty.toLocaleString()}</td><td colspan="3"></td></tr>`;
+            html += '</tbody></table>';
+        } else {
+            html += '<p style="color:#666;font-size:0.85rem">No stock issued on this day.</p>';
+        }
+
+        openReportWindow(`Day ${day.day} Stock Report — ${formatDateLong(day.date)}`, html);
+    }
+
+    function printFullStockReport() {
+        if (!settings || !appData) return;
+
+        const stockData = getStockData();
+        const catLabels = {};
+        EXPENSE_FIELDS.forEach(f => { catLabels[f.key] = f.label; });
+
+        const totalItems = stockData.length;
+        const totalReceived = stockData.reduce((s, it) => s + it.received, 0);
+        const totalIssued = stockData.reduce((s, it) => s + it.issued, 0);
+        const totalBalance = totalReceived - totalIssued;
+        const outOfStock = stockData.filter(it => it.received > 0 && (it.received - it.issued) <= 0).length;
+
+        let html = '<div style="margin-bottom:14px">';
+        html += `<div class="summary-box"><strong>Unique Items:</strong> ${totalItems}</div>`;
+        html += `<div class="summary-box"><strong>Total Received:</strong> ${totalReceived.toLocaleString()}</div>`;
+        html += `<div class="summary-box"><strong>Total Issued:</strong> ${totalIssued.toLocaleString()}</div>`;
+        html += `<div class="summary-box"><strong>Balance:</strong> ${totalBalance.toLocaleString()}</div>`;
+        html += `<div class="summary-box"><strong>Out of Stock:</strong> ${outOfStock}</div>`;
+        html += '</div>';
+
+        html += '<h3>Complete Stock Inventory</h3>';
+        stockData.sort((a,b) => a.category.localeCompare(b.category) || a.name.localeCompare(b.name));
+        html += '<table><thead><tr><th class="text-left">#</th><th class="text-left">Item</th><th class="text-left">Category</th><th class="text-right">Received</th><th class="text-right">Issued</th><th class="text-right">Balance</th><th class="text-left">Status</th></tr></thead><tbody>';
+        stockData.forEach((it, idx) => {
+            const bal = it.received - it.issued;
+            const status = bal <= 0 ? 'Out of Stock' : (it.received > 0 && bal / it.received <= 0.25 ? 'Low' : 'In Stock');
+            html += `<tr><td class="text-left">${idx+1}</td><td class="text-left" style="font-weight:600">${esc(it.name)}</td><td class="text-left">${catLabels[it.category]||it.category}</td><td class="text-right">${it.received.toLocaleString()}</td><td class="text-right">${it.issued.toLocaleString()}</td><td class="text-right" style="font-weight:700">${bal.toLocaleString()}</td><td class="text-left">${status}</td></tr>`;
+        });
+        html += `<tr class="total-row"><td colspan="3" class="text-left">TOTAL</td><td class="text-right">${totalReceived.toLocaleString()}</td><td class="text-right">${totalIssued.toLocaleString()}</td><td class="text-right" style="font-weight:700">${totalBalance.toLocaleString()}</td><td></td></tr>`;
+        html += '</tbody></table>';
+
+        html += '<h3>Daily Stock Movement</h3>';
+        let hasMovement = false;
+        appData.days.forEach(day => {
+            const data = getStockDataForDay(day.day);
+            if (data.received.length === 0 && data.issued.length === 0) return;
+            hasMovement = true;
+
+            html += `<h4>Day ${day.day} — ${formatDate(day.date)}</h4>`;
+            if (data.received.length > 0) {
+                html += '<table><thead><tr><th class="text-left">Item</th><th class="text-left">Category</th><th class="text-right">Qty</th><th class="text-left">Unit</th><th class="text-right">Amount</th></tr></thead><tbody>';
+                data.received.forEach(it => {
+                    html += `<tr><td class="text-left">${esc(it.name)}</td><td class="text-left">${catLabels[it.category]||it.category}</td><td class="text-right">${it.qty.toLocaleString()}</td><td class="text-left">${esc(it.unit)}</td><td class="text-right">${it.amount.toLocaleString()}</td></tr>`;
+                });
+                html += '</tbody></table>';
+            }
+            if (data.issued.length > 0) {
+                html += '<p style="font-size:0.8rem;font-weight:600;margin:6px 0 2px">Issued:</p>';
+                html += '<table><thead><tr><th class="text-left">Item</th><th class="text-right">Qty</th><th class="text-left">Issued To</th><th class="text-left">Note</th></tr></thead><tbody>';
+                data.issued.forEach(iss => {
+                    html += `<tr><td class="text-left">${esc(iss.itemName)}</td><td class="text-right">${iss.qty}</td><td class="text-left">${esc(iss.issuedTo||'Kitchen')}</td><td class="text-left">${esc(iss.note||'-')}</td></tr>`;
+                });
+                html += '</tbody></table>';
+            }
+        });
+        if (!hasMovement) {
+            html += '<p style="color:#666;font-size:0.85rem">No stock movement recorded yet.</p>';
+        }
+
+        const allIssued = (appData.stockIssued || []).slice().reverse();
+        if (allIssued.length > 0) {
+            html += '<h3>Complete Issue History</h3>';
+            html += '<table><thead><tr><th class="text-left">Date</th><th class="text-left">Item</th><th class="text-left">Category</th><th class="text-right">Qty</th><th class="text-left">Unit</th><th class="text-left">Issued To</th><th class="text-left">Note</th></tr></thead><tbody>';
+            allIssued.forEach(iss => {
+                html += `<tr><td class="text-left">${formatDate(iss.date)}</td><td class="text-left" style="font-weight:600">${esc(iss.itemName)}</td><td class="text-left">${catLabels[iss.category]||iss.category}</td><td class="text-right">${iss.qty}</td><td class="text-left">${esc(iss.unit||'')}</td><td class="text-left">${esc(iss.issuedTo||'Kitchen')}</td><td class="text-left">${esc(iss.note||'-')}</td></tr>`;
+            });
+            html += '</tbody></table>';
+        }
+
+        openReportWindow('Complete Stock Report — All Days', html);
     }
 
     // ===================== UPDATES =====================
