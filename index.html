@@ -941,12 +941,7 @@
                 <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px">
                     <div>
                         <label style="font-size:0.78rem;font-weight:600;color:var(--gray-700);display:block;margin-bottom:3px">Category</label>
-                        <select id="stock-issue-cat" onchange="updateStockItemDropdown()" style="width:100%;padding:9px 10px;border:1.5px solid var(--gray-200);border-radius:6px;font-size:0.88rem">
-                            <option value="groceries">Groceries</option>
-                            <option value="vegetables">Vegetables</option>
-                            <option value="accessories">Accessories</option>
-                            <option value="equipment">Equipment</option>
-                        </select>
+                        <select id="stock-issue-cat" onchange="updateStockItemDropdown()" style="width:100%;padding:9px 10px;border:1.5px solid var(--gray-200);border-radius:6px;font-size:0.88rem"></select>
                     </div>
                     <div>
                         <label style="font-size:0.78rem;font-weight:600;color:var(--gray-700);display:block;margin-bottom:3px">Item</label>
@@ -979,13 +974,7 @@
                     <button class="btn btn-sm btn-primary no-print" onclick="printStock()">Print</button>
                 </div>
                 <div style="margin-bottom:10px">
-                    <select id="stock-filter-cat" onchange="renderStockTable()" style="padding:7px 10px;border:1.5px solid var(--gray-200);border-radius:6px;font-size:0.85rem">
-                        <option value="all">All Categories</option>
-                        <option value="groceries">Groceries</option>
-                        <option value="vegetables">Vegetables</option>
-                        <option value="accessories">Accessories</option>
-                        <option value="equipment">Equipment</option>
-                    </select>
+                    <select id="stock-filter-cat" onchange="renderStockTable()" style="padding:7px 10px;border:1.5px solid var(--gray-200);border-radius:6px;font-size:0.85rem"></select>
                 </div>
                 <div class="table-wrap">
                     <table id="stock-table">
@@ -3906,7 +3895,28 @@
         return Object.values(stockMap);
     }
 
+    function populateStockDropdowns() {
+        const issueCat = document.getElementById('stock-issue-cat');
+        const filterCat = document.getElementById('stock-filter-cat');
+        if (issueCat) {
+            const prev = issueCat.value;
+            issueCat.innerHTML = EXPENSE_FIELDS.map(f =>
+                `<option value="${f.key}">${f.label}</option>`
+            ).join('');
+            if (prev && [...issueCat.options].some(o => o.value === prev)) issueCat.value = prev;
+        }
+        if (filterCat) {
+            const prev = filterCat.value;
+            filterCat.innerHTML = '<option value="all">All Categories</option>' +
+                EXPENSE_FIELDS.map(f =>
+                    `<option value="${f.key}">${f.label}</option>`
+                ).join('');
+            if (prev && [...filterCat.options].some(o => o.value === prev)) filterCat.value = prev;
+        }
+    }
+
     function renderStock() {
+        populateStockDropdowns();
         renderStockStats();
         renderStockTable();
         renderStockHistory();
