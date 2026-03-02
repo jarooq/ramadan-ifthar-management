@@ -1164,13 +1164,6 @@
                 <label>Category Name</label>
                 <input type="text" id="new-cat-name" placeholder="e.g. Fruits, Beverages, Rent" onkeydown="if(event.key==='Enter')confirmAddCategory()">
             </div>
-            <div style="margin-bottom:16px">
-                <label style="display:flex;align-items:center;gap:8px;font-size:0.85rem;cursor:pointer">
-                    <input type="checkbox" id="new-cat-stock" checked>
-                    Track in Stock Management
-                </label>
-                <span style="font-size:0.75rem;color:var(--gray-500);margin-left:28px">Enable for physical items (groceries, supplies). Disable for services (transport, wages).</span>
-            </div>
             <div id="custom-cat-list" style="margin-bottom:12px"></div>
             <div style="display:flex;gap:8px">
                 <button class="btn btn-outline" onclick="hideAddCategoryModal()" style="flex:1">Cancel</button>
@@ -1331,7 +1324,7 @@
             // Load custom categories first so migrateData knows all fields
             const tempCustom = serverData.customCategories || [];
             EXPENSE_FIELDS = [...DEFAULT_EXPENSE_FIELDS, ...tempCustom];
-            STOCK_CATEGORIES = [...DEFAULT_STOCK_CATEGORIES, ...tempCustom.filter(c => c.isStock).map(c => c.key)];
+            STOCK_CATEGORIES = [...DEFAULT_STOCK_CATEGORIES, ...tempCustom.map(c => c.key)];
             migrateData(serverData);
             appData = serverData;
             localStorage.setItem('ifthar_app_data', JSON.stringify(appData));
@@ -1422,7 +1415,7 @@
                     // Load custom categories before migration
                     if (data.customCategories && data.customCategories.length > 0) {
                         EXPENSE_FIELDS = [...DEFAULT_EXPENSE_FIELDS, ...data.customCategories];
-                        STOCK_CATEGORIES = [...DEFAULT_STOCK_CATEGORIES, ...data.customCategories.filter(c => c.isStock).map(c => c.key)];
+                        STOCK_CATEGORIES = [...DEFAULT_STOCK_CATEGORIES, ...data.customCategories.map(c => c.key)];
                     }
                     migrateData(data);
                     return data;
@@ -3136,14 +3129,14 @@
         // Rebuild EXPENSE_FIELDS from defaults + custom
         EXPENSE_FIELDS = [...DEFAULT_EXPENSE_FIELDS, ...custom];
         // Rebuild STOCK_CATEGORIES from defaults + custom stock ones
-        STOCK_CATEGORIES = [...DEFAULT_STOCK_CATEGORIES, ...custom.filter(c => c.isStock).map(c => c.key)];
+        STOCK_CATEGORIES = [...DEFAULT_STOCK_CATEGORIES, ...custom.map(c => c.key)];
     }
 
-    function addCustomCategory(label, isStock) {
+    function addCustomCategory(label) {
         const key = label.toLowerCase().replace(/[^a-z0-9]/g, '');
         if (!key || EXPENSE_FIELDS.some(f => f.key === key)) return alert('Category already exists or invalid name.');
         const colorIdx = (DEFAULT_EXPENSE_FIELDS.length + ((appData.customCategories || []).length)) % CATEGORY_COLORS.length;
-        const newCat = { key, label, color: CATEGORY_COLORS[colorIdx], isStock: !!isStock };
+        const newCat = { key, label, color: CATEGORY_COLORS[colorIdx], isStock: true };
         if (!appData.customCategories) appData.customCategories = [];
         appData.customCategories.push(newCat);
         loadCustomCategories();
@@ -3173,8 +3166,6 @@
             modal.style.display = 'flex';
             const inp = document.getElementById('new-cat-name');
             if (inp) { inp.value = ''; inp.focus(); }
-            const chk = document.getElementById('new-cat-stock');
-            if (chk) chk.checked = true;
             // Show existing custom categories
             const listEl = document.getElementById('custom-cat-list');
             const custom = (appData && appData.customCategories) || [];
@@ -3184,7 +3175,6 @@
                         custom.map(c => `<div style="display:flex;align-items:center;gap:8px;padding:5px 8px;background:var(--gray-50);border-radius:6px;margin-bottom:4px">
                             <span style="width:10px;height:10px;border-radius:50%;background:${c.color};flex-shrink:0"></span>
                             <span style="flex:1;font-size:0.85rem">${esc(c.label)}</span>
-                            ${c.isStock ? '<span style="font-size:0.7rem;background:#e8f5e9;color:#2e7d32;padding:1px 6px;border-radius:8px">Stock</span>' : ''}
                             <button onclick="removeCustomCategory('${c.key}');showAddCategoryModal()" style="background:none;border:none;color:var(--danger);cursor:pointer;font-size:1rem;padding:0 4px">&times;</button>
                         </div>`).join('');
                 } else {
@@ -3201,11 +3191,10 @@
 
     function confirmAddCategory() {
         const nameEl = document.getElementById('new-cat-name');
-        const stockEl = document.getElementById('new-cat-stock');
         if (!nameEl) return;
         const name = nameEl.value.trim();
         if (!name) return alert('Please enter a category name.');
-        addCustomCategory(name, stockEl ? stockEl.checked : false);
+        addCustomCategory(name);
         hideAddCategoryModal();
     }
 
@@ -3360,13 +3349,13 @@
                     </select>
                 </td>
                 <td>
-                    <input type="text" id="inv-name-${idx}" value="${esc(row.name)}" placeholder="Item name" onchange="updateInvoiceRow(${idx})" style="width:100%;padding:7px 8px;border:1.5px solid var(--gray-200);border-radius:4px;font-size:0.85rem">
+                    <input type="text" id="inv-name-${idx}" value="${esc(row.name)}" placeholder="Item name" onchange="updateInvoiceRow(${idx})" autocomplete="nope" style="width:100%;padding:7px 8px;border:1.5px solid var(--gray-200);border-radius:4px;font-size:0.85rem">
                 </td>
                 <td>
-                    <input type="number" id="inv-rate-${idx}" value="${row.rate}" placeholder="0" min="0" oninput="updateInvoiceRow(${idx})" style="width:100%;padding:10px 8px;border:1.5px solid var(--gray-200);border-radius:4px;font-size:1rem;text-align:right">
+                    <input type="number" id="inv-rate-${idx}" value="${row.rate}" placeholder="0" min="0" oninput="updateInvoiceRow(${idx})" autocomplete="nope" style="width:100%;padding:10px 8px;border:1.5px solid var(--gray-200);border-radius:4px;font-size:1rem;text-align:right">
                 </td>
                 <td>
-                    <input type="number" id="inv-qty-${idx}" value="${row.qty}" placeholder="1" min="0.1" step="0.1" oninput="updateInvoiceRow(${idx})" style="width:100%;padding:10px 8px;border:1.5px solid var(--gray-200);border-radius:4px;font-size:1rem;text-align:center;font-weight:600">
+                    <input type="number" id="inv-qty-${idx}" value="${row.qty}" placeholder="1" min="0.1" step="0.1" oninput="updateInvoiceRow(${idx})" autocomplete="nope" style="width:100%;padding:10px 8px;border:1.5px solid var(--gray-200);border-radius:4px;font-size:1rem;text-align:center;font-weight:600">
                 </td>
                 <td>
                     <select id="inv-unit-${idx}" onchange="updateInvoiceRow(${idx})" style="width:100%;padding:7px 6px;border:1.5px solid var(--gray-200);border-radius:4px;font-size:0.82rem">
@@ -4699,7 +4688,7 @@
                 if (parsed && parsed.days) {
                     if (parsed.customCategories && parsed.customCategories.length > 0) {
                         EXPENSE_FIELDS = [...DEFAULT_EXPENSE_FIELDS, ...parsed.customCategories];
-                        STOCK_CATEGORIES = [...DEFAULT_STOCK_CATEGORIES, ...parsed.customCategories.filter(c => c.isStock).map(c => c.key)];
+                        STOCK_CATEGORIES = [...DEFAULT_STOCK_CATEGORIES, ...parsed.customCategories.map(c => c.key)];
                     }
                     migrateData(parsed);
                     const newHash = JSON.stringify(parsed);
