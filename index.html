@@ -1336,8 +1336,9 @@
         if (serverData && serverData.days && serverData.days.length > 0) {
             const serverTime = serverData._lastModified || 0;
             const localTime = appData._lastModified || 0;
-            // Only use server data if it's newer than local data
-            if (serverTime >= localTime) {
+            // Only use server data if it's strictly newer than local data
+            // If both have no timestamp (0), always keep local data
+            if (serverTime > 0 && serverTime > localTime) {
                 if (!serverData.customCategories) serverData.customCategories = [];
                 const tempCustom = serverData.customCategories || [];
                 EXPENSE_FIELDS = [...DEFAULT_EXPENSE_FIELDS, ...tempCustom];
@@ -1347,7 +1348,7 @@
                 localStorage.setItem('ifthar_app_data', JSON.stringify(appData));
                 _lastDataHash = JSON.stringify(appData);
             } else {
-                // Local is newer — push to server
+                // Local is newer or server has no timestamp — push local to server
                 syncToServer('/api/data', appData);
             }
         }
@@ -1439,6 +1440,11 @@
                         STOCK_CATEGORIES = [...DEFAULT_STOCK_CATEGORIES, ...data.customCategories.map(c => c.key)];
                     }
                     migrateData(data);
+                    // Stamp timestamp if missing (legacy data)
+                    if (!data._lastModified) {
+                        data._lastModified = Date.now();
+                        localStorage.setItem('ifthar_app_data', JSON.stringify(data));
+                    }
                     return data;
                 }
             }
@@ -5004,7 +5010,8 @@
                     if (newHash !== _lastDataHash) {
                         const serverTime = parsed._lastModified || 0;
                         const localTime = appData._lastModified || 0;
-                        if (serverTime >= localTime) {
+                        // Only accept server data if strictly newer
+                        if (serverTime > 0 && serverTime > localTime) {
                             _lastDataHash = newHash;
                             appData = parsed;
                             localStorage.setItem('ifthar_app_data', JSON.stringify(appData));
