@@ -1325,20 +1325,26 @@
     }
 
     async function initFromServer() {
-        const serverSettings = await fetchFromServer('/api/settings');
-        const serverData = await fetchFromServer('/api/data');
+        // LOCAL DATA IS ALWAYS THE SOURCE OF TRUTH
+        // Server is only used as a backup destination, never overwrites local
+        const hasLocalData = appData && appData.days && appData.days.length > 0 &&
+            appData.days.some(d => d.allocations.length > 0 || d.status !== 'pending' || getExpenseTotal(d.expenses) > 0);
 
-        // Server has data → use it (new device scenario)
-        if (serverSettings) {
-            settings = serverSettings;
-            localStorage.setItem('ifthar_settings', JSON.stringify(settings));
-        }
-        if (serverData && serverData.days && serverData.days.length > 0) {
-            const serverTime = serverData._lastModified || 0;
-            const localTime = appData._lastModified || 0;
-            // Only use server data if it's strictly newer than local data
-            // If both have no timestamp (0), always keep local data
-            if (serverTime > 0 && serverTime > localTime) {
+        if (hasLocalData) {
+            // Always push local to server — local is king
+            _lastDataHash = JSON.stringify(appData);
+            syncToServer('/api/data', appData);
+            if (settings) syncToServer('/api/settings', settings);
+            console.log('[Sync] Local data pushed to server (local is source of truth)');
+        } else {
+            // No local data — this is a fresh/new device, pull from server
+            const serverSettings = await fetchFromServer('/api/settings');
+            const serverData = await fetchFromServer('/api/data');
+            if (serverSettings) {
+                settings = serverSettings;
+                localStorage.setItem('ifthar_settings', JSON.stringify(settings));
+            }
+            if (serverData && serverData.days && serverData.days.length > 0) {
                 if (!serverData.customCategories) serverData.customCategories = [];
                 const tempCustom = serverData.customCategories || [];
                 EXPENSE_FIELDS = [...DEFAULT_EXPENSE_FIELDS, ...tempCustom];
@@ -1347,21 +1353,7 @@
                 appData = serverData;
                 localStorage.setItem('ifthar_app_data', JSON.stringify(appData));
                 _lastDataHash = JSON.stringify(appData);
-            } else {
-                // Local is newer or server has no timestamp — push local to server
-                syncToServer('/api/data', appData);
-            }
-        }
-
-        // Local has data but server doesn't → push local to server (server lost data after redeploy)
-        if (!serverSettings && settings) {
-            syncToServer('/api/settings', settings);
-        }
-        if ((!serverData || !serverData.days || serverData.days.length === 0) && appData && appData.days && appData.days.length > 0) {
-            const hasRealData = appData.days.some(d => d.allocations.length > 0 || d.status !== 'pending' || getExpenseTotal(d.expenses) > 0);
-            if (hasRealData) {
-                syncToServer('/api/data', appData);
-                _lastDataHash = JSON.stringify(appData);
+                console.log('[Sync] New device: loaded data from server');
             }
         }
     }
@@ -5024,54 +5016,9 @@
         liveDisplayWindow.document.close();
     }
 
-    // Auto-refresh from server (syncs data across all clients)
-    // Skip refresh while modal is open to prevent losing edits
+    // Auto-refresh: only refresh updates feed + live display
+    // LOCAL DATA IS NEVER OVERWRITTEN by server — local is always source of truth
     setInterval(async () => {
-        const modalOpen = document.getElementById('dayModal').classList.contains('active') || document.getElementById('editOrgModal').classList.contains('active');
-        if (modalOpen) return;
-        try {
-            const resp = await fetch('/api/data');
-            if (resp.ok) {
-                const parsed = await resp.json();
-                if (parsed && parsed.days) {
-                    if (parsed.customCategories && parsed.customCategories.length > 0) {
-                        EXPENSE_FIELDS = [...DEFAULT_EXPENSE_FIELDS, ...parsed.customCategories];
-                        STOCK_CATEGORIES = [...DEFAULT_STOCK_CATEGORIES, ...parsed.customCategories.map(c => c.key)];
-                    }
-                    migrateData(parsed);
-                    const newHash = JSON.stringify(parsed);
-                    if (newHash !== _lastDataHash) {
-                        const serverTime = parsed._lastModified || 0;
-                        const localTime = appData._lastModified || 0;
-                        // Only accept server data if strictly newer
-                        if (serverTime > 0 && serverTime > localTime) {
-                            _lastDataHash = newHash;
-                            appData = parsed;
-                            localStorage.setItem('ifthar_app_data', JSON.stringify(appData));
-                            refresh();
-                        }
-                    }
-                }
-            }
-        } catch(e) {
-            const freshData = localStorage.getItem('ifthar_app_data');
-            if (freshData) {
-                try { appData = JSON.parse(freshData); } catch(e2) {}
-            }
-        }
-        // Also refresh settings
-        try {
-            const resp = await fetch('/api/settings');
-            if (resp.ok) {
-                const s = await resp.json();
-                if (s && JSON.stringify(s) !== JSON.stringify(settings)) {
-                    settings = s;
-                    localStorage.setItem('ifthar_settings', JSON.stringify(s));
-                    applySettings();
-                }
-            }
-        } catch(e) {}
-        // Refresh updates feed
         fetchAndRenderUpdates();
         renderLiveDisplay();
         if (liveDisplayWindow && !liveDisplayWindow.closed) updateLiveDisplayWindow();
