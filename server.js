@@ -117,11 +117,22 @@ const upload = multer({ storage, limits: { fileSize: 10 * 1024 * 1024 } });
 app.use((req, res, next) => {
     res.header('Access-Control-Allow-Origin', '*');
     res.header('Access-Control-Allow-Methods', 'GET, POST, DELETE, OPTIONS');
-    res.header('Access-Control-Allow-Headers', 'Content-Type');
+    res.header('Access-Control-Allow-Headers', 'Content-Type, x-api-key');
     if (req.method === 'OPTIONS') return res.sendStatus(200);
     next();
 });
 app.use(express.json({ limit: '10mb' }));
+
+// ===================== API Key Protection =====================
+const API_KEY = process.env.API_KEY || 'ifthar2026secure';
+
+function requireApiKey(req, res, next) {
+    const key = req.headers['x-api-key'];
+    if (key !== API_KEY) {
+        return res.status(401).json({ error: 'Unauthorized: invalid API key' });
+    }
+    next();
+}
 
 // ===================== Serve uploaded photos (from GridFS) =====================
 
@@ -171,7 +182,7 @@ app.get('/api/settings', async (req, res) => {
     }
 });
 
-app.post('/api/settings', async (req, res) => {
+app.post('/api/settings', requireApiKey, async (req, res) => {
     try {
         await createBackup();
         await setDoc('settings', req.body);
@@ -192,7 +203,7 @@ app.get('/api/data', async (req, res) => {
     }
 });
 
-app.post('/api/data', async (req, res) => {
+app.post('/api/data', requireApiKey, async (req, res) => {
     try {
         await createBackup();
         await setDoc('appdata', req.body);
@@ -237,7 +248,7 @@ app.get('/api/backups/view/:filename', async (req, res) => {
     }
 });
 
-app.post('/api/backups/restore/:filename', async (req, res) => {
+app.post('/api/backups/restore/:filename', requireApiKey, async (req, res) => {
     try {
         const filename = req.params.filename;
         if (!filename.startsWith('backup-') || !filename.endsWith('.json')) {
@@ -266,7 +277,7 @@ app.get('/api/updates', async (req, res) => {
     }
 });
 
-app.post('/api/updates', upload.single('photo'), async (req, res) => {
+app.post('/api/updates', requireApiKey, upload.single('photo'), async (req, res) => {
     try {
         const updates = (await getDoc('updates')) || [];
         const update = {
@@ -295,7 +306,7 @@ app.post('/api/updates', upload.single('photo'), async (req, res) => {
     }
 });
 
-app.delete('/api/updates/:id', async (req, res) => {
+app.delete('/api/updates/:id', requireApiKey, async (req, res) => {
     try {
         let updates = (await getDoc('updates')) || [];
         const update = updates.find(u => u.id === req.params.id);

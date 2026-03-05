@@ -1223,12 +1223,13 @@
                         '#8BC34A','#FF5722','#009688','#673AB7','#FFC107','#03A9F4','#CDDC39','#FF4081','#536DFE','#76FF03'];
 
     // ===================== SERVER SYNC =====================
+    const API_KEY = 'ifthar2026secure';
     let _lastDataHash = '';
 
     function syncToServer(endpoint, data) {
         fetch(endpoint, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY },
             body: JSON.stringify(data)
         }).then(resp => {
             if (!resp.ok) throw new Error('Server returned ' + resp.status);
@@ -1544,7 +1545,7 @@
         if (!confirm('Restore this backup? Current data will be replaced with the backup data.')) return;
         if (!confirm('Are you sure? This will overwrite all current settings and schedule data.')) return;
         try {
-            const res = await fetch('/api/backups/restore/' + filename, { method: 'POST' });
+            const res = await fetch('/api/backups/restore/' + filename, { method: 'POST', headers: { 'x-api-key': API_KEY } });
             const result = await res.json();
             if (result.ok) {
                 alert('Backup restored successfully! Page will reload.');
@@ -4513,7 +4514,7 @@
         }
 
         try {
-            const resp = await fetch('/api/updates', { method: 'POST', body: formData });
+            const resp = await fetch('/api/updates', { method: 'POST', headers: { 'x-api-key': API_KEY }, body: formData });
             if (resp.ok) {
                 // Remember staff name for next time
                 localStorage.setItem('ifthar_staff_name', staff);
@@ -4531,7 +4532,7 @@
     async function deleteUpdate(id) {
         if (!confirm('Delete this update?')) return;
         try {
-            await fetch('/api/updates/' + id, { method: 'DELETE' });
+            await fetch('/api/updates/' + id, { method: 'DELETE', headers: { 'x-api-key': API_KEY } });
             await fetchAndRenderUpdates();
         } catch (e) {}
     }
