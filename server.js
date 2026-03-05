@@ -220,6 +220,23 @@ app.get('/api/backups', async (req, res) => {
     }
 });
 
+// Read backup content without restoring
+app.get('/api/backups/view/:filename', async (req, res) => {
+    try {
+        const filename = req.params.filename;
+        if (!filename.startsWith('backup-') || !filename.endsWith('.json')) {
+            return res.status(400).json({ error: 'Invalid backup file' });
+        }
+        const backup = await db.collection('backups').findOne({ filename });
+        if (!backup) {
+            return res.status(404).json({ error: 'Backup not found' });
+        }
+        res.json({ filename: backup.filename, created: backup.created, appdata: backup.appdata, settings: backup.settings });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 app.post('/api/backups/restore/:filename', async (req, res) => {
     try {
         const filename = req.params.filename;
