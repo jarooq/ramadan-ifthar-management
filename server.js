@@ -11,7 +11,7 @@ const PORT = process.env.PORT || 3000;
 // MongoDB connection
 const MONGODB_URI = process.env.MONGODB_URI || 'mongodb://localhost:27017/ifthar';
 let db;
-const MAX_BACKUPS = 20;
+const MAX_BACKUPS = 100;
 
 // Local uploads dir (temporary, photos also stored in GridFS)
 const DATA_DIR = path.join(__dirname, 'data');
