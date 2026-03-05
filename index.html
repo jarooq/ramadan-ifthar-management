@@ -1226,18 +1226,20 @@
     const API_KEY = 'Ifthar@2026';
     let _lastDataHash = '';
 
-    function syncToServer(endpoint, data) {
-        fetch(endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY },
-            body: JSON.stringify(data)
-        }).then(resp => {
+    async function saveToServer(endpoint, data) {
+        try {
+            const resp = await fetch(endpoint, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-api-key': API_KEY },
+                body: JSON.stringify(data)
+            });
             if (!resp.ok) throw new Error('Server returned ' + resp.status);
             _syncFailed = false;
             const toast = document.getElementById('sync-toast');
             if (toast) toast.style.display = 'none';
-        }).catch(err => {
-            console.warn('Server sync failed:', err);
+            return true;
+        } catch (err) {
+            console.warn('Server save failed:', err);
             if (!_syncFailed) {
                 _syncFailed = true;
                 let toast = document.getElementById('sync-toast');
@@ -1247,10 +1249,11 @@
                     toast.style.cssText = 'position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:#dc3545;color:white;padding:10px 20px;border-radius:8px;font-size:0.85rem;font-weight:600;z-index:9999;box-shadow:0 4px 12px rgba(0,0,0,0.3)';
                     document.body.appendChild(toast);
                 }
-                toast.textContent = 'Sync failed - changes saved locally only';
+                toast.textContent = 'Server save failed - please check connection';
                 toast.style.display = 'block';
             }
-        });
+            return false;
+        }
     }
     let _syncFailed = false;
 
@@ -1259,7 +1262,7 @@
             const resp = await fetch(endpoint);
             if (resp.ok) return await resp.json();
         } catch (err) {
-            console.warn('Server fetch failed, using localStorage:', err);
+            console.warn('Server fetch failed:', err);
         }
         return null;
     }
@@ -1326,52 +1329,33 @@
     }
 
     async function initFromServer() {
-        // LOCAL DATA IS ALWAYS THE SOURCE OF TRUTH
-        // Server is only used as a backup destination, never overwrites local
-        const hasLocalData = appData && appData.days && appData.days.length > 0 &&
-            appData.days.some(d => d.allocations.length > 0 || d.status !== 'pending' || getExpenseTotal(d.expenses) > 0);
-
-        if (hasLocalData) {
-            // Always push local to server — local is king
+        // MongoDB is the ONLY data source
+        const serverSettings = await fetchFromServer('/api/settings');
+        const serverData = await fetchFromServer('/api/data');
+        if (serverSettings) {
+            settings = serverSettings;
+        }
+        if (serverData && serverData.days && serverData.days.length > 0) {
+            if (!serverData.customCategories) serverData.customCategories = [];
+            const tempCustom = serverData.customCategories || [];
+            EXPENSE_FIELDS = [...DEFAULT_EXPENSE_FIELDS, ...tempCustom];
+            STOCK_CATEGORIES = [...DEFAULT_STOCK_CATEGORIES, ...tempCustom.map(c => c.key)];
+            migrateData(serverData);
+            appData = serverData;
             _lastDataHash = JSON.stringify(appData);
-            syncToServer('/api/data', appData);
-            if (settings) syncToServer('/api/settings', settings);
-            console.log('[Sync] Local data pushed to server (local is source of truth)');
-        } else {
-            // No local data — this is a fresh/new device, pull from server
-            const serverSettings = await fetchFromServer('/api/settings');
-            const serverData = await fetchFromServer('/api/data');
-            if (serverSettings) {
-                settings = serverSettings;
-                localStorage.setItem('ifthar_settings', JSON.stringify(settings));
-            }
-            if (serverData && serverData.days && serverData.days.length > 0) {
-                if (!serverData.customCategories) serverData.customCategories = [];
-                const tempCustom = serverData.customCategories || [];
-                EXPENSE_FIELDS = [...DEFAULT_EXPENSE_FIELDS, ...tempCustom];
-                STOCK_CATEGORIES = [...DEFAULT_STOCK_CATEGORIES, ...tempCustom.map(c => c.key)];
-                migrateData(serverData);
-                appData = serverData;
-                localStorage.setItem('ifthar_app_data', JSON.stringify(appData));
-                _lastDataHash = JSON.stringify(appData);
-                console.log('[Sync] New device: loaded data from server');
-            }
+            console.log('[DB] Data loaded from MongoDB');
         }
     }
 
     // ===================== SETTINGS =====================
     function loadSettings() {
-        try {
-            const s = localStorage.getItem('ifthar_settings');
-            if (s) return JSON.parse(s);
-        } catch(e) {}
+        // Settings loaded from server in initFromServer()
         return null;
     }
     function saveSettingsToStorage(s) {
-        localStorage.setItem('ifthar_settings', JSON.stringify(s));
-        syncToServer('/api/settings', s);
+        saveToServer('/api/settings', s);
     }
-    let settings = loadSettings();
+    let settings = null;
 
     // ===================== SETUP =====================
     function showSetupIfNeeded() {
@@ -1422,34 +1406,14 @@
     }
 
     function loadData() {
-        try {
-            const s = localStorage.getItem('ifthar_app_data');
-            if (s) {
-                const data = JSON.parse(s);
-                if (data.days && data.days.length > 0) {
-                    // Load custom categories before migration
-                    if (data.customCategories && data.customCategories.length > 0) {
-                        EXPENSE_FIELDS = [...DEFAULT_EXPENSE_FIELDS, ...data.customCategories];
-                        STOCK_CATEGORIES = [...DEFAULT_STOCK_CATEGORIES, ...data.customCategories.map(c => c.key)];
-                    }
-                    migrateData(data);
-                    // Stamp timestamp if missing (legacy data)
-                    if (!data._lastModified) {
-                        data._lastModified = Date.now();
-                        localStorage.setItem('ifthar_app_data', JSON.stringify(data));
-                    }
-                    return data;
-                }
-            }
-        } catch(e) {}
+        // Data loaded from server in initFromServer()
         return getDefaultData();
     }
 
     function saveData() {
         appData._lastModified = Date.now();
-        localStorage.setItem('ifthar_app_data', JSON.stringify(appData));
         _lastDataHash = JSON.stringify(appData);
-        syncToServer('/api/data', appData);
+        saveToServer('/api/data', appData);
     }
 
     let appData = loadData();
