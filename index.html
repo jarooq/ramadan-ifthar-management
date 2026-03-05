@@ -1334,15 +1334,22 @@
             localStorage.setItem('ifthar_settings', JSON.stringify(settings));
         }
         if (serverData && serverData.days && serverData.days.length > 0) {
-            if (!serverData.customCategories) serverData.customCategories = [];
-            // Load custom categories first so migrateData knows all fields
-            const tempCustom = serverData.customCategories || [];
-            EXPENSE_FIELDS = [...DEFAULT_EXPENSE_FIELDS, ...tempCustom];
-            STOCK_CATEGORIES = [...DEFAULT_STOCK_CATEGORIES, ...tempCustom.map(c => c.key)];
-            migrateData(serverData);
-            appData = serverData;
-            localStorage.setItem('ifthar_app_data', JSON.stringify(appData));
-            _lastDataHash = JSON.stringify(appData);
+            const serverTime = serverData._lastModified || 0;
+            const localTime = appData._lastModified || 0;
+            // Only use server data if it's newer than local data
+            if (serverTime >= localTime) {
+                if (!serverData.customCategories) serverData.customCategories = [];
+                const tempCustom = serverData.customCategories || [];
+                EXPENSE_FIELDS = [...DEFAULT_EXPENSE_FIELDS, ...tempCustom];
+                STOCK_CATEGORIES = [...DEFAULT_STOCK_CATEGORIES, ...tempCustom.map(c => c.key)];
+                migrateData(serverData);
+                appData = serverData;
+                localStorage.setItem('ifthar_app_data', JSON.stringify(appData));
+                _lastDataHash = JSON.stringify(appData);
+            } else {
+                // Local is newer — push to server
+                syncToServer('/api/data', appData);
+            }
         }
 
         // Local has data but server doesn't → push local to server (server lost data after redeploy)
@@ -1440,6 +1447,7 @@
     }
 
     function saveData() {
+        appData._lastModified = Date.now();
         localStorage.setItem('ifthar_app_data', JSON.stringify(appData));
         _lastDataHash = JSON.stringify(appData);
         syncToServer('/api/data', appData);
@@ -4994,10 +5002,14 @@
                     migrateData(parsed);
                     const newHash = JSON.stringify(parsed);
                     if (newHash !== _lastDataHash) {
-                        _lastDataHash = newHash;
-                        appData = parsed;
-                        localStorage.setItem('ifthar_app_data', JSON.stringify(appData));
-                        refresh();
+                        const serverTime = parsed._lastModified || 0;
+                        const localTime = appData._lastModified || 0;
+                        if (serverTime >= localTime) {
+                            _lastDataHash = newHash;
+                            appData = parsed;
+                            localStorage.setItem('ifthar_app_data', JSON.stringify(appData));
+                            refresh();
+                        }
                     }
                 }
             }
