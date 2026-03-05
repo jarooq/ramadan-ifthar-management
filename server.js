@@ -203,6 +203,18 @@ app.get('/api/data', async (req, res) => {
     }
 });
 
+// Beacon endpoint (sendBeacon can't set headers, so key is in query param)
+app.post('/api/data/beacon', async (req, res) => {
+    if (req.query.key !== API_KEY) return res.status(401).json({ error: 'Unauthorized' });
+    try {
+        await createBackup();
+        await setDoc('appdata', req.body);
+        res.json({ ok: true });
+    } catch (e) {
+        res.status(500).json({ error: e.message });
+    }
+});
+
 app.post('/api/data', requireApiKey, async (req, res) => {
     try {
         await createBackup();

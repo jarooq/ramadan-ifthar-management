@@ -1352,8 +1352,8 @@
         // Settings loaded from server in initFromServer()
         return null;
     }
-    function saveSettingsToStorage(s) {
-        saveToServer('/api/settings', s);
+    function saveSettingsToServer(s) {
+        return saveToServer('/api/settings', s);
     }
     let settings = null;
 
@@ -1362,7 +1362,7 @@
         if (!settings) document.getElementById('setupModal').classList.add('active');
     }
 
-    function completeSetup() {
+    async function completeSetup() {
         const orgName = document.getElementById('setupOrgName').value.trim();
         const capacity = parseInt(document.getElementById('setupCapacity').value) || 0;
         const totalDays = parseInt(document.getElementById('setupTotalDays').value) || 30;
@@ -1371,9 +1371,9 @@
         if (capacity <= 0) return alert('Please enter a valid daily capacity.');
         if (!startDate) return alert('Please select a start date.');
         settings = { orgName, dailyCapacity: capacity, totalDays, startDate };
-        saveSettingsToStorage(settings);
+        await saveSettingsToServer(settings);
         appData = getDefaultData();
-        saveData();
+        await saveDataNow();
         document.getElementById('setupModal').classList.remove('active');
         applySettings();
         refresh();
@@ -1410,11 +1410,40 @@
         return getDefaultData();
     }
 
+    let _saveTimer = null;
+    let _savePending = false;
+
     function saveData() {
         appData._lastModified = Date.now();
         _lastDataHash = JSON.stringify(appData);
-        saveToServer('/api/data', appData);
+        // Debounce: wait 500ms before saving to prevent rapid fire
+        if (_saveTimer) clearTimeout(_saveTimer);
+        _savePending = true;
+        _saveTimer = setTimeout(async () => {
+            _savePending = false;
+            await saveToServer('/api/data', appData);
+        }, 500);
     }
+
+    // Force immediate save (for critical operations like setup/import)
+    async function saveDataNow() {
+        if (_saveTimer) clearTimeout(_saveTimer);
+        _savePending = false;
+        appData._lastModified = Date.now();
+        _lastDataHash = JSON.stringify(appData);
+        await saveToServer('/api/data', appData);
+    }
+
+    // Save before page unload
+    window.addEventListener('beforeunload', function() {
+        if (_savePending) {
+            if (_saveTimer) clearTimeout(_saveTimer);
+            navigator.sendBeacon('/api/data/beacon?key=' + encodeURIComponent(API_KEY), new Blob(
+                [JSON.stringify(appData)],
+                { type: 'application/json' }
+            ));
+        }
+    });
 
     let appData = loadData();
 
@@ -1454,7 +1483,7 @@
         const dateChanged = startDate !== settings.startDate;
         const totalChanged = totalDays !== settings.totalDays;
         settings = { orgName, dailyCapacity: capacity, totalDays, startDate };
-        saveSettingsToStorage(settings);
+        saveSettingsToServer(settings);
         if (totalChanged) {
             if (confirm('Total days changed. Rebuild daily plan? (Organizations will be kept, allocations will be reset.)')) {
                 const orgs = appData.organizations;
@@ -5008,14 +5037,14 @@
         const file = event.target.files[0];
         if (!file) return;
         const reader = new FileReader();
-        reader.onload = function(e) {
+        reader.onload = async function(e) {
             try {
                 const imported = JSON.parse(e.target.result);
                 if (imported.settings && imported.appData) {
                     if (!confirm(`Import "${imported.settings.orgName}" with ${imported.appData.organizations.length} organizations?`)) return;
                     settings = imported.settings;
                     appData = imported.appData;
-                    saveSettingsToStorage(settings);
+                    await saveSettingsToServer(settings);
                 } else if (imported.organizations && imported.days) {
                     if (!confirm(`Import ${imported.organizations.length} organizations?`)) return;
                     appData = imported;
@@ -5035,7 +5064,7 @@
                         if (a.contactNumber === undefined) a.contactNumber = '';
                     });
                 });
-                saveData(); applySettings(); refresh();
+                await saveDataNow(); applySettings(); refresh();
                 alert('Data imported successfully!');
             } catch(err) { alert('Invalid file: ' + err.message); }
         };

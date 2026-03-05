@@ -1,4 +1,4 @@
-const CACHE_NAME = 'ifthar-v1';
+const CACHE_NAME = 'ifthar-v2';
 const URLS_TO_CACHE = ['/', '/index.html'];
 
 self.addEventListener('install', event => {
@@ -18,10 +18,15 @@ self.addEventListener('activate', event => {
 });
 
 self.addEventListener('fetch', event => {
-    // Network-first strategy: try network, fall back to cache
+    const url = new URL(event.request.url);
+    // Never cache API responses - always go to server for data
+    if (url.pathname.startsWith('/api/')) {
+        event.respondWith(fetch(event.request));
+        return;
+    }
+    // Network-first strategy for static assets: try network, fall back to cache
     event.respondWith(
         fetch(event.request).then(response => {
-            // Cache successful GET responses
             if (event.request.method === 'GET' && response.status === 200) {
                 const clone = response.clone();
                 caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
