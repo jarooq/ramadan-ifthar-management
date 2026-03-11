@@ -1328,6 +1328,8 @@
         return data;
     }
 
+    let _serverLoaded = false; // true only after successful server load
+
     async function initFromServer() {
         // MongoDB is the ONLY data source
         const serverSettings = await fetchFromServer('/api/settings');
@@ -1343,7 +1345,11 @@
             migrateData(serverData);
             appData = serverData;
             _lastDataHash = JSON.stringify(appData);
+            _serverLoaded = true;
             console.log('[DB] Data loaded from MongoDB');
+        } else if (serverSettings) {
+            // Server has settings but no data = fresh setup, safe to save
+            _serverLoaded = true;
         }
     }
 
@@ -1414,6 +1420,10 @@
     let _savePending = false;
 
     function saveData() {
+        if (!_serverLoaded) {
+            console.warn('[DB] BLOCKED save — server data not loaded yet');
+            return;
+        }
         appData._lastModified = Date.now();
         _lastDataHash = JSON.stringify(appData);
         // Debounce: wait 500ms before saving to prevent rapid fire
@@ -1427,6 +1437,10 @@
 
     // Force immediate save (for critical operations like setup/import)
     async function saveDataNow() {
+        if (!_serverLoaded) {
+            console.warn('[DB] BLOCKED save — server data not loaded yet');
+            return;
+        }
         if (_saveTimer) clearTimeout(_saveTimer);
         _savePending = false;
         appData._lastModified = Date.now();
@@ -1436,7 +1450,7 @@
 
     // Save before page unload
     window.addEventListener('beforeunload', function() {
-        if (_savePending) {
+        if (_savePending && _serverLoaded) {
             if (_saveTimer) clearTimeout(_saveTimer);
             navigator.sendBeacon('/api/data/beacon?key=' + encodeURIComponent(API_KEY), new Blob(
                 [JSON.stringify(appData)],
@@ -5126,6 +5140,14 @@
     // Init - fetch shared data from server, then render
     (async function init() {
         await initFromServer();
+        if (!_serverLoaded) {
+            // Show error banner - do NOT allow edits with empty data
+            let banner = document.createElement('div');
+            banner.style.cssText = 'position:fixed;top:0;left:0;right:0;background:#dc3545;color:white;padding:15px;text-align:center;font-weight:600;z-index:99999;font-size:1rem';
+            banner.textContent = 'Could not connect to server. Please check your internet and refresh the page.';
+            document.body.prepend(banner);
+            return; // Stop init — don't render with empty data
+        }
         loadCustomCategories();
         if (settings) { applySettings(); refresh(); }
         showSetupIfNeeded();
