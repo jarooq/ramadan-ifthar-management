@@ -2329,13 +2329,13 @@
                     <td>
                         <span id="alloc-qty-display-${ai}">${a.qty.toLocaleString()}</span>
                         <input type="number" id="alloc-qty-edit-${ai}" value="${a.qty}" min="1" style="display:none;width:80px;padding:4px 6px;border:1.5px solid var(--gray-200);border-radius:4px;font-size:0.82rem">
-                        <button id="alloc-qty-btn-${ai}" onclick="toggleEditAllocQty(${dayNum},${ai})" class="btn btn-sm" style="margin-left:4px;padding:2px 8px;font-size:0.72rem;background:var(--gray-100);color:var(--gray-700)">${allocLocked ? 'Edit' : ''}</button>
+                        <button id="alloc-qty-btn-${ai}" onclick="toggleEditAllocQty(${dayNum},${ai})" class="btn btn-sm" style="margin-left:4px;padding:2px 8px;font-size:0.72rem;background:var(--gray-100);color:var(--gray-700)">Edit</button>
                     </td>
                     <td><input type="text" class="alloc-media" data-idx="${ai}" value="${esc(a.mediaOfficer || '')}" placeholder="Staff name" style="padding:4px 8px;border:1.5px solid var(--gray-200);border-radius:4px;font-size:0.82rem;width:120px"></td>
                     <td><input type="text" class="alloc-location" data-idx="${ai}" value="${esc(a.location || '')}" placeholder="Distribution point" style="padding:4px 8px;border:1.5px solid var(--gray-200);border-radius:4px;font-size:0.82rem;width:140px"></td>
                     <td><input type="text" class="alloc-contact" data-idx="${ai}" value="${esc(a.contactPerson || '')}" placeholder="Contact name" style="padding:4px 8px;border:1.5px solid var(--gray-200);border-radius:4px;font-size:0.82rem;width:120px"></td>
                     <td><input type="text" class="alloc-phone" data-idx="${ai}" value="${esc(a.contactNumber || '')}" placeholder="Phone" style="padding:4px 8px;border:1.5px solid var(--gray-200);border-radius:4px;font-size:0.82rem;width:110px"></td>
-                    <td>${allocLocked ? '' : `<button class="btn btn-sm btn-danger" onclick="removeDayAlloc(${dayNum},'${a.orgId}')">Remove</button>`}</td>
+                    <td><button class="btn btn-sm btn-danger" onclick="removeDayAlloc(${dayNum},'${a.orgId}')">Remove</button></td>
                 </tr>`;
             });
             html += `</tbody></table></div>`;
