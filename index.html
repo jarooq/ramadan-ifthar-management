@@ -2449,7 +2449,7 @@
         }
         day.allocations.push({ orgId: org.id, orgName: org.name, qty, mediaOfficer: '', location: '', contactPerson: '', contactNumber: '' });
         day.locked = true;
-        saveData(); runScheduler(); openDayModal(dayNum); renderDaysGrid();
+        saveData(); openDayModal(dayNum); refresh();
     }
 
     function toggleEditAllocQty(dayNum, allocIdx) {
@@ -2474,10 +2474,10 @@
             if (!day) return;
             saveAllocInputs(dayNum);
             day.allocations[allocIdx].qty = newQty;
+            day.locked = true;
             saveData();
             openDayModal(dayNum);
-            renderDaysGrid();
-            renderSchedule();
+            refresh();
         }
     }
 
@@ -2486,7 +2486,7 @@
         saveAllocInputs(dayNum);  // Preserve existing input values
         day.allocations = day.allocations.filter(a => a.orgId !== orgId);
         day.locked = true;
-        saveData(); runScheduler(); openDayModal(dayNum); renderDaysGrid();
+        saveData(); openDayModal(dayNum); refresh();
     }
 
     function quickSetStatus(dayNum, status) {
@@ -2507,7 +2507,7 @@
         day.locked = true;
         saveData();
         openDayModal(dayNum);
-        renderDaysGrid();
+        refresh();
     }
 
     function saveDayDetails(dayNum) {
@@ -2536,7 +2536,6 @@
         document.querySelectorAll('.day-checklist').forEach(el => { day.checklist[el.dataset.key] = el.checked; });
         day.locked = true;
         saveData();
-        runScheduler();
         refresh(); closeModal();
     }
 
