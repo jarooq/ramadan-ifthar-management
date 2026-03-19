@@ -834,6 +834,16 @@
                 </div>
                 <div id="donor-report-content" style="margin-top:16px"></div>
             </div>
+            <div class="card no-print">
+                <div class="card-title">
+                    <span>Full Details Report</span>
+                </div>
+                <p style="font-size:0.82rem;color:var(--gray-500);margin-bottom:12px">Complete project report with all financial details, daily breakdown, and itemized expenses.</p>
+                <div style="display:flex;gap:8px;flex-wrap:wrap">
+                    <button class="btn btn-sm btn-primary" onclick="generateFullDetailsReport()">Generate Full Report</button>
+                    <button class="btn btn-sm" style="background:#25D366;color:white" onclick="shareFullReportWhatsApp()">WhatsApp Summary</button>
+                </div>
+            </div>
             <div class="card">
                 <div class="card-title">
                     <span id="report-title"></span>
@@ -3180,6 +3190,161 @@
     function shareDonorReportWhatsApp() {
         if (!_lastDonorReport) return alert('Generate a report first');
         window.open('https://wa.me/?text=' + encodeURIComponent(_lastDonorReport), '_blank');
+    }
+
+    // ===================== FULL DETAILS REPORT =====================
+    let _fullReportWhatsApp = '';
+
+    function generateFullDetailsReport() {
+        if (!settings || !appData) return;
+        const cap = settings.dailyCapacity;
+        const totalDays = settings.totalDays;
+        const totalCapacity = cap * totalDays;
+        const totalReceived = appData.organizations.reduce((s, o) => s + o.qty, 0);
+        const totalCooked = appData.days.reduce((s, d) => s + d.actualCooked, 0);
+        const totalDistributed = appData.days.reduce((s, d) => s + d.actualDistributed, 0);
+        const daysCompleted = appData.days.filter(d => d.status === 'distributed' || d.status === 'reported').length;
+
+        // Expense totals
+        const expTotals = {};
+        EXPENSE_FIELDS.forEach(f => { expTotals[f.key] = 0; });
+        let grandTotal = 0;
+        appData.days.forEach(d => {
+            const exp = d.expenses || {};
+            const dt = getExpenseTotal(exp);
+            grandTotal += dt;
+            EXPENSE_FIELDS.forEach(f => { expTotals[f.key] += (exp[f.key] || 0); });
+        });
+
+        // --- Build HTML ---
+        let html = '';
+
+        // Section 1: Project Overview
+        html += '<h3>Project Overview</h3>';
+        html += '<table><tbody>';
+        html += `<tr><td style="font-weight:600;padding:6px 14px 6px 0;width:220px">Organization</td><td>${esc(settings.orgName)}</td></tr>`;
+        html += `<tr><td style="font-weight:600;padding:6px 14px 6px 0">Project Period</td><td>${formatDate(settings.startDate)} — ${formatDate(appData.days[appData.days.length-1].date)} (${totalDays} days)</td></tr>`;
+        html += `<tr><td style="font-weight:600;padding:6px 14px 6px 0">Daily Capacity</td><td>${cap.toLocaleString()} meals</td></tr>`;
+        html += `<tr><td style="font-weight:600;padding:6px 14px 6px 0">Total Capacity</td><td>${totalCapacity.toLocaleString()} meals</td></tr>`;
+        html += `<tr><td style="font-weight:600;padding:6px 14px 6px 0">Total Received from Donors</td><td>${totalReceived.toLocaleString()} meals</td></tr>`;
+        html += `<tr><td style="font-weight:600;padding:6px 14px 6px 0">Total Cooked</td><td>${totalCooked.toLocaleString()} meals</td></tr>`;
+        html += `<tr><td style="font-weight:600;padding:6px 14px 6px 0">Total Distributed</td><td>${totalDistributed.toLocaleString()} meals</td></tr>`;
+        html += `<tr><td style="font-weight:600;padding:6px 14px 6px 0">Days Completed</td><td>${daysCompleted} / ${totalDays}</td></tr>`;
+        html += `<tr><td style="font-weight:600;padding:6px 14px 6px 0">Coverage</td><td>${totalCapacity > 0 ? ((totalReceived / totalCapacity) * 100).toFixed(1) : 0}%</td></tr>`;
+        html += `<tr style="background:#e8f5ef"><td style="font-weight:700;padding:8px 14px 8px 0;font-size:1rem">Total Expenses</td><td style="font-weight:700;font-size:1rem">${grandTotal.toLocaleString()}</td></tr>`;
+        html += '</tbody></table>';
+
+        // Section 2: Expense Breakdown by Category
+        html += '<h3>Expense Breakdown by Category</h3>';
+        html += '<table><thead><tr><th class="text-left">Category</th><th class="text-right">Amount</th><th class="text-right">% of Total</th></tr></thead><tbody>';
+        EXPENSE_FIELDS.forEach(f => {
+            if (expTotals[f.key] > 0) {
+                const pct = grandTotal > 0 ? ((expTotals[f.key] / grandTotal) * 100).toFixed(1) : 0;
+                html += `<tr><td class="text-left">${f.label}</td><td class="text-right">${expTotals[f.key].toLocaleString()}</td><td class="text-right">${pct}%</td></tr>`;
+            }
+        });
+        html += `<tr class="total-row"><td class="text-left">GRAND TOTAL</td><td class="text-right">${grandTotal.toLocaleString()}</td><td class="text-right">100%</td></tr>`;
+        html += '</tbody></table>';
+
+        // Section 3: Donor Organizations
+        html += '<h3>Donor Organizations</h3>';
+        html += '<table><thead><tr><th class="text-left">Organization</th><th class="text-right">Meals</th><th class="text-left">Schedule</th><th class="text-right">Min/Day</th><th class="text-right">Share</th><th class="text-left">Contact</th></tr></thead><tbody>';
+        appData.organizations.forEach(org => {
+            html += `<tr><td class="text-left">${esc(org.name)}</td><td class="text-right">${org.qty.toLocaleString()}</td><td class="text-left">${esc(getScheduleLabel(org))}</td><td class="text-right">${(org.minPerDay||100).toLocaleString()}</td><td class="text-right">${totalReceived > 0 ? ((org.qty/totalReceived)*100).toFixed(1) : 0}%</td><td class="text-left">${esc(org.contact||'-')} ${esc(org.phone||'')}</td></tr>`;
+        });
+        html += '</tbody></table>';
+
+        // Section 4: Daily Log with Expenses
+        html += '<h3>Daily Breakdown</h3>';
+        html += '<table><thead><tr><th class="text-left">Day</th><th class="text-left">Date</th><th class="text-left">Donors</th><th class="text-right">Planned</th><th class="text-right">Cooked</th><th class="text-right">Distributed</th><th class="text-right">Expenses</th><th class="text-left">Status</th></tr></thead><tbody>';
+        const statusNames = { pending:'Pending', scheduled:'Scheduled', cooking:'Cooking', cooked:'Cooked', distributed:'Distributed', reported:'Reported' };
+        appData.days.forEach(day => {
+            const planned = day.allocations.reduce((s, a) => s + a.qty, 0);
+            const dayExp = getExpenseTotal(day.expenses || {});
+            const orgs = day.allocations.map(a => a.orgName + '(' + a.qty + ')').join(', ') || '-';
+            html += `<tr><td class="text-left">Day ${day.day}</td><td class="text-left">${formatDate(day.date)}</td><td class="text-left" style="font-size:0.75rem">${esc(orgs)}</td><td class="text-right">${planned.toLocaleString()}</td><td class="text-right">${day.actualCooked.toLocaleString()}</td><td class="text-right">${day.actualDistributed.toLocaleString()}</td><td class="text-right">${dayExp > 0 ? dayExp.toLocaleString() : '-'}</td><td class="text-left">${statusNames[day.status]||day.status}</td></tr>`;
+        });
+        const totalPlanned = appData.days.reduce((s,d) => s + d.allocations.reduce((ss,a) => ss+a.qty, 0), 0);
+        html += `<tr class="total-row"><td colspan="3" class="text-left">TOTAL</td><td class="text-right">${totalPlanned.toLocaleString()}</td><td class="text-right">${totalCooked.toLocaleString()}</td><td class="text-right">${totalDistributed.toLocaleString()}</td><td class="text-right">${grandTotal.toLocaleString()}</td><td></td></tr>`;
+        html += '</tbody></table>';
+
+        // Section 5: Itemized Expenses per Day
+        html += '<h3>Itemized Expense Details</h3>';
+        let hasAnyItems = false;
+        appData.days.forEach(day => {
+            const items = day.expenseItems || {};
+            const hasItems = EXPENSE_FIELDS.some(f => (items[f.key] || []).length > 0);
+            if (!hasItems) return;
+            hasAnyItems = true;
+            const dayTotal = getExpenseTotal(day.expenses || {});
+            html += `<h4>Day ${day.day} — ${formatDate(day.date)} (Total: ${dayTotal.toLocaleString()})</h4>`;
+            EXPENSE_FIELDS.forEach(f => {
+                const catItems = items[f.key] || [];
+                if (catItems.length === 0) return;
+                const catTotal = catItems.reduce((s, it) => s + (it.amount || 0), 0);
+                html += `<div class="cat-header">${f.label} — ${catTotal.toLocaleString()}</div>`;
+                html += '<table><thead><tr><th class="text-left" style="width:30px">#</th><th class="text-left">Item</th><th class="text-right">Rate</th><th class="text-right">Qty</th><th class="text-left">Unit</th><th class="text-right">Amount</th></tr></thead><tbody>';
+                catItems.forEach((it, idx) => {
+                    html += `<tr><td class="text-left">${idx+1}</td><td class="text-left">${esc(it.name)}</td><td class="text-right">${(it.rate||0).toLocaleString()}</td><td class="text-right">${it.qty||''}</td><td class="text-left">${esc(it.unit||'')}</td><td class="text-right">${(it.amount||0).toLocaleString()}</td></tr>`;
+                });
+                html += '</tbody></table>';
+            });
+        });
+        if (!hasAnyItems) html += '<p style="color:#666;text-align:center">No itemized expenses recorded.</p>';
+
+        // Section 6: Per-Donor Summary
+        html += '<h3>Per-Donor Summary</h3>';
+        appData.organizations.forEach(org => {
+            const daysWithOrg = appData.days.filter(d => d.allocations.some(a => a.orgId === org.id));
+            const orgPlanned = daysWithOrg.reduce((s, d) => s + d.allocations.filter(a => a.orgId === org.id).reduce((ss, a) => ss + a.qty, 0), 0);
+            const orgCompleted = daysWithOrg.filter(d => d.status === 'distributed' || d.status === 'reported').length;
+            html += `<h4>${esc(org.name)} — ${org.qty.toLocaleString()} meals sponsored</h4>`;
+            html += `<div style="font-size:0.82rem;margin-bottom:6px">Days: ${daysWithOrg.length} allocated, ${orgCompleted} completed | Planned: ${orgPlanned.toLocaleString()} meals</div>`;
+            if (daysWithOrg.length > 0) {
+                html += '<table><thead><tr><th class="text-left">Day</th><th class="text-left">Date</th><th class="text-right">Meals</th><th class="text-left">Location</th><th class="text-left">Staff</th><th class="text-left">Status</th></tr></thead><tbody>';
+                daysWithOrg.forEach(day => {
+                    const alloc = day.allocations.find(a => a.orgId === org.id);
+                    if (!alloc) return;
+                    html += `<tr><td class="text-left">Day ${day.day}</td><td class="text-left">${formatDate(day.date)}</td><td class="text-right">${alloc.qty.toLocaleString()}</td><td class="text-left">${esc(alloc.location||'-')}</td><td class="text-left">${esc(alloc.mediaOfficer||'-')}</td><td class="text-left">${statusNames[day.status]||day.status}</td></tr>`;
+                });
+                html += '</tbody></table>';
+            }
+        });
+
+        openReportWindow('Complete Project Report — Full Details', html);
+
+        // Build WhatsApp summary
+        _fullReportWhatsApp = `*${settings.orgName} — Full Project Report*\n`;
+        _fullReportWhatsApp += `Generated: ${new Date().toLocaleDateString()}\n\n`;
+        _fullReportWhatsApp += `*Overview:*\n`;
+        _fullReportWhatsApp += `Daily Capacity: ${cap.toLocaleString()} meals\n`;
+        _fullReportWhatsApp += `Total Capacity: ${totalCapacity.toLocaleString()} meals\n`;
+        _fullReportWhatsApp += `Total Received: ${totalReceived.toLocaleString()} meals\n`;
+        _fullReportWhatsApp += `Total Cooked: ${totalCooked.toLocaleString()} meals\n`;
+        _fullReportWhatsApp += `Total Distributed: ${totalDistributed.toLocaleString()} meals\n`;
+        _fullReportWhatsApp += `Days Completed: ${daysCompleted}/${totalDays}\n`;
+        _fullReportWhatsApp += `Total Expenses: ${grandTotal.toLocaleString()}\n\n`;
+        _fullReportWhatsApp += `*Expense Breakdown:*\n`;
+        EXPENSE_FIELDS.forEach(f => {
+            if (expTotals[f.key] > 0) _fullReportWhatsApp += `${f.label}: ${expTotals[f.key].toLocaleString()}\n`;
+        });
+        _fullReportWhatsApp += `\n*Donors:*\n`;
+        appData.organizations.forEach(org => {
+            _fullReportWhatsApp += `${org.name}: ${org.qty.toLocaleString()} meals\n`;
+        });
+        _fullReportWhatsApp += `\n*Daily Log:*\n`;
+        appData.days.forEach(day => {
+            const planned = day.allocations.reduce((s, a) => s + a.qty, 0);
+            const dayExp = getExpenseTotal(day.expenses || {});
+            if (planned > 0 || day.actualCooked > 0 || dayExp > 0) {
+                _fullReportWhatsApp += `Day ${day.day} (${formatDate(day.date)}): ${planned} planned, ${day.actualCooked} cooked, ${day.actualDistributed} distributed${dayExp > 0 ? ', Exp: ' + dayExp.toLocaleString() : ''} — ${statusNames[day.status]||day.status}\n`;
+            }
+        });
+    }
+
+    function shareFullReportWhatsApp() {
+        if (!_fullReportWhatsApp) return alert('Generate the full report first');
+        window.open('https://wa.me/?text=' + encodeURIComponent(_fullReportWhatsApp), '_blank');
     }
 
     // ===================== EXPENSES PAGE =====================
