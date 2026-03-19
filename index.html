@@ -3204,6 +3204,7 @@
         const totalCooked = appData.days.reduce((s, d) => s + d.actualCooked, 0);
         const totalDistributed = appData.days.reduce((s, d) => s + d.actualDistributed, 0);
         const daysCompleted = appData.days.filter(d => d.status === 'distributed' || d.status === 'reported').length;
+        const statusNames = { pending:'Pending', scheduled:'Scheduled', cooking:'Cooking', cooked:'Cooked', distributed:'Distributed', reported:'Reported' };
 
         // Expense totals
         const expTotals = {};
@@ -3216,11 +3217,20 @@
             EXPENSE_FIELDS.forEach(f => { expTotals[f.key] += (exp[f.key] || 0); });
         });
 
+        // Pre-compute donor stats
+        const donorStats = appData.organizations.map(org => {
+            const daysWithOrg = appData.days.filter(d => d.allocations.some(a => a.orgId === org.id));
+            const totalAllocated = daysWithOrg.reduce((s, d) => s + d.allocations.filter(a => a.orgId === org.id).reduce((ss, a) => ss + a.qty, 0), 0);
+            const completedDays = daysWithOrg.filter(d => d.status === 'distributed' || d.status === 'reported');
+            const distributedAllocated = completedDays.reduce((s, d) => s + d.allocations.filter(a => a.orgId === org.id).reduce((ss, a) => ss + a.qty, 0), 0);
+            return { org, daysWithOrg, totalAllocated, completedDays, distributedAllocated, remaining: org.qty - totalAllocated, daysCount: daysWithOrg.length, completedCount: completedDays.length };
+        });
+
         // --- Build HTML ---
         let html = '';
 
         // Section 1: Project Overview
-        html += '<h3>Project Overview</h3>';
+        html += '<h3>1. Project Overview</h3>';
         html += '<table><tbody>';
         html += `<tr><td style="font-weight:600;padding:6px 14px 6px 0;width:220px">Organization</td><td>${esc(settings.orgName)}</td></tr>`;
         html += `<tr><td style="font-weight:600;padding:6px 14px 6px 0">Project Period</td><td>${formatDate(settings.startDate)} — ${formatDate(appData.days[appData.days.length-1].date)} (${totalDays} days)</td></tr>`;
@@ -3234,8 +3244,127 @@
         html += `<tr style="background:#e8f5ef"><td style="font-weight:700;padding:8px 14px 8px 0;font-size:1rem">Total Expenses</td><td style="font-weight:700;font-size:1rem">${grandTotal.toLocaleString()}</td></tr>`;
         html += '</tbody></table>';
 
-        // Section 2: Expense Breakdown by Category
-        html += '<h3>Expense Breakdown by Category</h3>';
+        // Section 2: Donor-wise Allocation vs Distributed
+        html += '<h3>2. Donor-wise Allocation vs Distributed</h3>';
+        html += '<table><thead><tr><th class="text-left">Donor</th><th class="text-right">Sponsored</th><th class="text-right">Allocated</th><th class="text-right">Distributed</th><th class="text-right">Remaining</th><th class="text-right">Days</th><th class="text-right">Completed</th><th class="text-right">Progress</th></tr></thead><tbody>';
+        let totalSponsored = 0, totalAllocAll = 0, totalDistAll = 0, totalRemAll = 0;
+        donorStats.forEach(ds => {
+            const pct = ds.org.qty > 0 ? ((ds.totalAllocated / ds.org.qty) * 100).toFixed(1) : 0;
+            const barColor = ds.remaining <= 0 ? '#2e7d32' : ds.remaining < ds.org.qty * 0.2 ? '#f9a825' : '#1565c0';
+            totalSponsored += ds.org.qty;
+            totalAllocAll += ds.totalAllocated;
+            totalDistAll += ds.distributedAllocated;
+            totalRemAll += Math.max(0, ds.remaining);
+            html += `<tr>
+                <td class="text-left" style="font-weight:600">${esc(ds.org.name)}</td>
+                <td class="text-right">${ds.org.qty.toLocaleString()}</td>
+                <td class="text-right">${ds.totalAllocated.toLocaleString()}</td>
+                <td class="text-right">${ds.distributedAllocated.toLocaleString()}</td>
+                <td class="text-right" style="color:${ds.remaining <= 0 ? '#2e7d32' : '#c62828'}">${Math.max(0, ds.remaining).toLocaleString()}</td>
+                <td class="text-right">${ds.daysCount}</td>
+                <td class="text-right">${ds.completedCount}</td>
+                <td class="text-right"><div style="display:inline-flex;align-items:center;gap:6px"><div style="width:60px;height:8px;background:#eee;border-radius:4px;overflow:hidden"><div style="width:${Math.min(100,pct)}%;height:100%;background:${barColor};border-radius:4px"></div></div><span style="font-size:0.75rem">${pct}%</span></div></td>
+            </tr>`;
+        });
+        html += `<tr class="total-row"><td class="text-left">TOTAL</td><td class="text-right">${totalSponsored.toLocaleString()}</td><td class="text-right">${totalAllocAll.toLocaleString()}</td><td class="text-right">${totalDistAll.toLocaleString()}</td><td class="text-right">${totalRemAll.toLocaleString()}</td><td colspan="3"></td></tr>`;
+        html += '</tbody></table>';
+
+        // Section 3: Day-by-Day Donor Allocation Grid
+        html += '<h3>3. Day-by-Day Donor Allocation Grid</h3>';
+        html += '<div style="overflow-x:auto"><table style="font-size:0.7rem"><thead><tr><th class="text-left" style="position:sticky;left:0;background:#f5f5f5;z-index:1">Day</th><th class="text-left" style="position:sticky;left:40px;background:#f5f5f5;z-index:1">Date</th>';
+        appData.organizations.forEach(org => {
+            const shortName = org.name.length > 10 ? org.name.substring(0, 10) + '..' : org.name;
+            html += `<th class="text-right" style="white-space:nowrap">${esc(shortName)}</th>`;
+        });
+        html += '<th class="text-right" style="font-weight:700">Total</th><th class="text-right">Cooked</th><th class="text-right">Distrib.</th><th class="text-left">Status</th></tr></thead><tbody>';
+
+        const orgTotals = {};
+        appData.organizations.forEach(org => { orgTotals[org.id] = 0; });
+        let gridTotalPlanned = 0, gridTotalCooked = 0, gridTotalDist = 0;
+
+        appData.days.forEach(day => {
+            const dayPlanned = day.allocations.reduce((s, a) => s + a.qty, 0);
+            const isCompleted = day.status === 'distributed' || day.status === 'reported';
+            const rowBg = isCompleted ? 'background:#f0faf4' : '';
+            html += `<tr style="${rowBg}"><td class="text-left" style="font-weight:600;position:sticky;left:0;${rowBg || 'background:white'};z-index:1">D${day.day}</td><td class="text-left" style="white-space:nowrap;position:sticky;left:40px;${rowBg || 'background:white'};z-index:1">${formatDate(day.date)}</td>`;
+            appData.organizations.forEach(org => {
+                const alloc = day.allocations.find(a => a.orgId === org.id);
+                const qty = alloc ? alloc.qty : 0;
+                orgTotals[org.id] += qty;
+                html += `<td class="text-right" style="${qty > 0 ? 'font-weight:600' : 'color:#ccc'}">${qty > 0 ? qty.toLocaleString() : '-'}</td>`;
+            });
+            gridTotalPlanned += dayPlanned;
+            gridTotalCooked += day.actualCooked;
+            gridTotalDist += day.actualDistributed;
+            html += `<td class="text-right" style="font-weight:700">${dayPlanned > 0 ? dayPlanned.toLocaleString() : '-'}</td>`;
+            html += `<td class="text-right">${day.actualCooked > 0 ? day.actualCooked.toLocaleString() : '-'}</td>`;
+            html += `<td class="text-right">${day.actualDistributed > 0 ? day.actualDistributed.toLocaleString() : '-'}</td>`;
+            html += `<td class="text-left">${statusNames[day.status] || day.status}</td></tr>`;
+        });
+
+        // Totals row
+        html += '<tr class="total-row"><td class="text-left" style="position:sticky;left:0;background:#f9f9f9;z-index:1" colspan="2">TOTAL</td>';
+        appData.organizations.forEach(org => {
+            html += `<td class="text-right">${orgTotals[org.id].toLocaleString()}</td>`;
+        });
+        html += `<td class="text-right">${gridTotalPlanned.toLocaleString()}</td><td class="text-right">${gridTotalCooked.toLocaleString()}</td><td class="text-right">${gridTotalDist.toLocaleString()}</td><td></td></tr>`;
+
+        // Sponsored row for comparison
+        html += '<tr style="background:#e8f5ef;font-weight:600"><td class="text-left" style="position:sticky;left:0;background:#e8f5ef;z-index:1" colspan="2">SPONSORED</td>';
+        appData.organizations.forEach(org => {
+            html += `<td class="text-right">${org.qty.toLocaleString()}</td>`;
+        });
+        html += `<td class="text-right">${totalReceived.toLocaleString()}</td><td colspan="3"></td></tr>`;
+
+        // Remaining row
+        html += '<tr style="font-weight:600;font-size:0.72rem"><td class="text-left" style="position:sticky;left:0;background:white;z-index:1" colspan="2">REMAINING</td>';
+        appData.organizations.forEach(org => {
+            const rem = org.qty - orgTotals[org.id];
+            html += `<td class="text-right" style="color:${rem <= 0 ? '#2e7d32' : '#c62828'}">${rem <= 0 ? 'Done' : rem.toLocaleString()}</td>`;
+        });
+        html += '<td colspan="4"></td></tr>';
+        html += '</tbody></table></div>';
+
+        // Section 4: Per-Donor Detailed Breakdown
+        html += '<h3>4. Per-Donor Detailed Breakdown</h3>';
+        donorStats.forEach(ds => {
+            const pct = ds.org.qty > 0 ? ((ds.totalAllocated / ds.org.qty) * 100).toFixed(1) : 0;
+            html += `<h4>${esc(ds.org.name)}</h4>`;
+            html += `<div style="display:flex;gap:16px;flex-wrap:wrap;font-size:0.82rem;margin-bottom:8px">`;
+            html += `<div class="summary-box"><strong>Sponsored:</strong> ${ds.org.qty.toLocaleString()}</div>`;
+            html += `<div class="summary-box"><strong>Allocated:</strong> ${ds.totalAllocated.toLocaleString()}</div>`;
+            html += `<div class="summary-box"><strong>Distributed:</strong> ${ds.distributedAllocated.toLocaleString()}</div>`;
+            html += `<div class="summary-box"><strong>Remaining:</strong> ${Math.max(0, ds.remaining).toLocaleString()}</div>`;
+            html += `<div class="summary-box"><strong>Days:</strong> ${ds.daysCount} allocated, ${ds.completedCount} completed</div>`;
+            html += `<div class="summary-box"><strong>Progress:</strong> ${pct}%</div>`;
+            html += '</div>';
+            if (ds.daysWithOrg.length > 0) {
+                html += '<table><thead><tr><th class="text-left">Day</th><th class="text-left">Date</th><th class="text-right">Allocated</th><th class="text-left">Location</th><th class="text-left">Staff</th><th class="text-left">Contact</th><th class="text-right">Day Cooked</th><th class="text-right">Day Distrib.</th><th class="text-left">Status</th></tr></thead><tbody>';
+                ds.daysWithOrg.forEach(day => {
+                    const alloc = day.allocations.find(a => a.orgId === ds.org.id);
+                    if (!alloc) return;
+                    const isCompleted = day.status === 'distributed' || day.status === 'reported';
+                    html += `<tr style="${isCompleted ? 'background:#f0faf4' : ''}">
+                        <td class="text-left">Day ${day.day}</td>
+                        <td class="text-left">${formatDate(day.date)}</td>
+                        <td class="text-right" style="font-weight:600">${alloc.qty.toLocaleString()}</td>
+                        <td class="text-left">${esc(alloc.location || '-')}</td>
+                        <td class="text-left">${esc(alloc.mediaOfficer || '-')}</td>
+                        <td class="text-left" style="font-size:0.75rem">${esc(alloc.contactPerson || '-')}${alloc.contactNumber ? ' (' + esc(alloc.contactNumber) + ')' : ''}</td>
+                        <td class="text-right">${day.actualCooked > 0 ? day.actualCooked.toLocaleString() : '-'}</td>
+                        <td class="text-right">${day.actualDistributed > 0 ? day.actualDistributed.toLocaleString() : '-'}</td>
+                        <td class="text-left">${statusNames[day.status] || day.status}</td>
+                    </tr>`;
+                });
+                html += `<tr class="total-row"><td colspan="2" class="text-left">TOTAL</td><td class="text-right">${ds.totalAllocated.toLocaleString()}</td><td colspan="3"></td><td class="text-right">${ds.completedDays.reduce((s,d) => s+d.actualCooked, 0).toLocaleString()}</td><td class="text-right">${ds.completedDays.reduce((s,d) => s+d.actualDistributed, 0).toLocaleString()}</td><td></td></tr>`;
+                html += '</tbody></table>';
+            } else {
+                html += '<p style="color:#999;font-size:0.82rem">No days allocated yet.</p>';
+            }
+        });
+
+        // Section 5: Expense Breakdown by Category
+        html += '<h3>5. Expense Breakdown by Category</h3>';
         html += '<table><thead><tr><th class="text-left">Category</th><th class="text-right">Amount</th><th class="text-right">% of Total</th></tr></thead><tbody>';
         EXPENSE_FIELDS.forEach(f => {
             if (expTotals[f.key] > 0) {
@@ -3246,30 +3375,25 @@
         html += `<tr class="total-row"><td class="text-left">GRAND TOTAL</td><td class="text-right">${grandTotal.toLocaleString()}</td><td class="text-right">100%</td></tr>`;
         html += '</tbody></table>';
 
-        // Section 3: Donor Organizations
-        html += '<h3>Donor Organizations</h3>';
-        html += '<table><thead><tr><th class="text-left">Organization</th><th class="text-right">Meals</th><th class="text-left">Schedule</th><th class="text-right">Min/Day</th><th class="text-right">Share</th><th class="text-left">Contact</th></tr></thead><tbody>';
-        appData.organizations.forEach(org => {
-            html += `<tr><td class="text-left">${esc(org.name)}</td><td class="text-right">${org.qty.toLocaleString()}</td><td class="text-left">${esc(getScheduleLabel(org))}</td><td class="text-right">${(org.minPerDay||100).toLocaleString()}</td><td class="text-right">${totalReceived > 0 ? ((org.qty/totalReceived)*100).toFixed(1) : 0}%</td><td class="text-left">${esc(org.contact||'-')} ${esc(org.phone||'')}</td></tr>`;
-        });
-        html += '</tbody></table>';
-
-        // Section 4: Daily Log with Expenses
-        html += '<h3>Daily Breakdown</h3>';
-        html += '<table><thead><tr><th class="text-left">Day</th><th class="text-left">Date</th><th class="text-left">Donors</th><th class="text-right">Planned</th><th class="text-right">Cooked</th><th class="text-right">Distributed</th><th class="text-right">Expenses</th><th class="text-left">Status</th></tr></thead><tbody>';
-        const statusNames = { pending:'Pending', scheduled:'Scheduled', cooking:'Cooking', cooked:'Cooked', distributed:'Distributed', reported:'Reported' };
+        // Section 6: Daily Expenses Summary
+        html += '<h3>6. Daily Expenses Summary</h3>';
+        html += '<table><thead><tr><th class="text-left">Day</th><th class="text-left">Date</th>';
+        EXPENSE_FIELDS.forEach(f => { if (expTotals[f.key] > 0) html += `<th class="text-right">${f.label}</th>`; });
+        html += '<th class="text-right" style="font-weight:700">Total</th></tr></thead><tbody>';
         appData.days.forEach(day => {
-            const planned = day.allocations.reduce((s, a) => s + a.qty, 0);
-            const dayExp = getExpenseTotal(day.expenses || {});
-            const orgs = day.allocations.map(a => a.orgName + '(' + a.qty + ')').join(', ') || '-';
-            html += `<tr><td class="text-left">Day ${day.day}</td><td class="text-left">${formatDate(day.date)}</td><td class="text-left" style="font-size:0.75rem">${esc(orgs)}</td><td class="text-right">${planned.toLocaleString()}</td><td class="text-right">${day.actualCooked.toLocaleString()}</td><td class="text-right">${day.actualDistributed.toLocaleString()}</td><td class="text-right">${dayExp > 0 ? dayExp.toLocaleString() : '-'}</td><td class="text-left">${statusNames[day.status]||day.status}</td></tr>`;
+            const exp = day.expenses || {};
+            const dayTotal = getExpenseTotal(exp);
+            if (dayTotal === 0) return;
+            html += `<tr><td class="text-left" style="font-weight:600">Day ${day.day}</td><td class="text-left">${formatDate(day.date)}</td>`;
+            EXPENSE_FIELDS.forEach(f => { if (expTotals[f.key] > 0) html += `<td class="text-right">${(exp[f.key]||0) > 0 ? (exp[f.key]).toLocaleString() : '-'}</td>`; });
+            html += `<td class="text-right" style="font-weight:700">${dayTotal.toLocaleString()}</td></tr>`;
         });
-        const totalPlanned = appData.days.reduce((s,d) => s + d.allocations.reduce((ss,a) => ss+a.qty, 0), 0);
-        html += `<tr class="total-row"><td colspan="3" class="text-left">TOTAL</td><td class="text-right">${totalPlanned.toLocaleString()}</td><td class="text-right">${totalCooked.toLocaleString()}</td><td class="text-right">${totalDistributed.toLocaleString()}</td><td class="text-right">${grandTotal.toLocaleString()}</td><td></td></tr>`;
-        html += '</tbody></table>';
+        html += `<tr class="total-row"><td colspan="2" class="text-left">TOTAL</td>`;
+        EXPENSE_FIELDS.forEach(f => { if (expTotals[f.key] > 0) html += `<td class="text-right">${expTotals[f.key].toLocaleString()}</td>`; });
+        html += `<td class="text-right">${grandTotal.toLocaleString()}</td></tr></tbody></table>`;
 
-        // Section 5: Itemized Expenses per Day
-        html += '<h3>Itemized Expense Details</h3>';
+        // Section 7: Itemized Expenses per Day
+        html += '<h3>7. Itemized Expense Details</h3>';
         let hasAnyItems = false;
         appData.days.forEach(day => {
             const items = day.expenseItems || {};
@@ -3292,54 +3416,26 @@
         });
         if (!hasAnyItems) html += '<p style="color:#666;text-align:center">No itemized expenses recorded.</p>';
 
-        // Section 6: Per-Donor Summary
-        html += '<h3>Per-Donor Summary</h3>';
-        appData.organizations.forEach(org => {
-            const daysWithOrg = appData.days.filter(d => d.allocations.some(a => a.orgId === org.id));
-            const orgPlanned = daysWithOrg.reduce((s, d) => s + d.allocations.filter(a => a.orgId === org.id).reduce((ss, a) => ss + a.qty, 0), 0);
-            const orgCompleted = daysWithOrg.filter(d => d.status === 'distributed' || d.status === 'reported').length;
-            html += `<h4>${esc(org.name)} — ${org.qty.toLocaleString()} meals sponsored</h4>`;
-            html += `<div style="font-size:0.82rem;margin-bottom:6px">Days: ${daysWithOrg.length} allocated, ${orgCompleted} completed | Planned: ${orgPlanned.toLocaleString()} meals</div>`;
-            if (daysWithOrg.length > 0) {
-                html += '<table><thead><tr><th class="text-left">Day</th><th class="text-left">Date</th><th class="text-right">Meals</th><th class="text-left">Location</th><th class="text-left">Staff</th><th class="text-left">Status</th></tr></thead><tbody>';
-                daysWithOrg.forEach(day => {
-                    const alloc = day.allocations.find(a => a.orgId === org.id);
-                    if (!alloc) return;
-                    html += `<tr><td class="text-left">Day ${day.day}</td><td class="text-left">${formatDate(day.date)}</td><td class="text-right">${alloc.qty.toLocaleString()}</td><td class="text-left">${esc(alloc.location||'-')}</td><td class="text-left">${esc(alloc.mediaOfficer||'-')}</td><td class="text-left">${statusNames[day.status]||day.status}</td></tr>`;
-                });
-                html += '</tbody></table>';
-            }
-        });
-
         openReportWindow('Complete Project Report — Full Details', html);
 
         // Build WhatsApp summary
         _fullReportWhatsApp = `*${settings.orgName} — Full Project Report*\n`;
         _fullReportWhatsApp += `Generated: ${new Date().toLocaleDateString()}\n\n`;
         _fullReportWhatsApp += `*Overview:*\n`;
-        _fullReportWhatsApp += `Daily Capacity: ${cap.toLocaleString()} meals\n`;
-        _fullReportWhatsApp += `Total Capacity: ${totalCapacity.toLocaleString()} meals\n`;
-        _fullReportWhatsApp += `Total Received: ${totalReceived.toLocaleString()} meals\n`;
-        _fullReportWhatsApp += `Total Cooked: ${totalCooked.toLocaleString()} meals\n`;
-        _fullReportWhatsApp += `Total Distributed: ${totalDistributed.toLocaleString()} meals\n`;
-        _fullReportWhatsApp += `Days Completed: ${daysCompleted}/${totalDays}\n`;
-        _fullReportWhatsApp += `Total Expenses: ${grandTotal.toLocaleString()}\n\n`;
-        _fullReportWhatsApp += `*Expense Breakdown:*\n`;
+        _fullReportWhatsApp += `Capacity: ${cap.toLocaleString()} meals/day x ${totalDays} days = ${totalCapacity.toLocaleString()}\n`;
+        _fullReportWhatsApp += `Received: ${totalReceived.toLocaleString()} | Cooked: ${totalCooked.toLocaleString()} | Distributed: ${totalDistributed.toLocaleString()}\n`;
+        _fullReportWhatsApp += `Days: ${daysCompleted}/${totalDays} completed\n`;
+        _fullReportWhatsApp += `Expenses: ${grandTotal.toLocaleString()}\n\n`;
+        _fullReportWhatsApp += `*Donor Allocation vs Distributed:*\n`;
+        donorStats.forEach(ds => {
+            const pct = ds.org.qty > 0 ? ((ds.totalAllocated / ds.org.qty) * 100).toFixed(0) : 0;
+            _fullReportWhatsApp += `${ds.org.name}: ${ds.org.qty.toLocaleString()} sponsored, ${ds.totalAllocated.toLocaleString()} allocated, ${ds.distributedAllocated.toLocaleString()} distributed (${pct}%)\n`;
+        });
+        _fullReportWhatsApp += `\n*Expense Breakdown:*\n`;
         EXPENSE_FIELDS.forEach(f => {
             if (expTotals[f.key] > 0) _fullReportWhatsApp += `${f.label}: ${expTotals[f.key].toLocaleString()}\n`;
         });
-        _fullReportWhatsApp += `\n*Donors:*\n`;
-        appData.organizations.forEach(org => {
-            _fullReportWhatsApp += `${org.name}: ${org.qty.toLocaleString()} meals\n`;
-        });
-        _fullReportWhatsApp += `\n*Daily Log:*\n`;
-        appData.days.forEach(day => {
-            const planned = day.allocations.reduce((s, a) => s + a.qty, 0);
-            const dayExp = getExpenseTotal(day.expenses || {});
-            if (planned > 0 || day.actualCooked > 0 || dayExp > 0) {
-                _fullReportWhatsApp += `Day ${day.day} (${formatDate(day.date)}): ${planned} planned, ${day.actualCooked} cooked, ${day.actualDistributed} distributed${dayExp > 0 ? ', Exp: ' + dayExp.toLocaleString() : ''} — ${statusNames[day.status]||day.status}\n`;
-            }
-        });
+        _fullReportWhatsApp += `Total: ${grandTotal.toLocaleString()}\n`;
     }
 
     function shareFullReportWhatsApp() {
