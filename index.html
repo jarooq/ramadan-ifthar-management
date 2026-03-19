@@ -2306,13 +2306,9 @@
         const remaining = cap - total;
         const maxExtra = 100;
         const overCap = total - cap;
-        const todayStr = new Date().toISOString().split('T')[0];
-        const allocLocked = day.date <= todayStr; // Lock allocations for today and past days
+        const allocLocked = false; // All days are editable
 
         let html = '';
-        if (allocLocked) {
-            html += `<div style="padding:8px 12px;background:#fff3cd;border:1px solid #ffc107;border-radius:8px;margin-bottom:12px;font-size:0.82rem;display:flex;align-items:center;gap:8px"><span>&#128274;</span> <span>Allocations are locked for today and past days. Other details can still be edited.</span></div>`;
-        }
         html += `<div style="margin-bottom:14px">
             <div style="display:flex;justify-content:space-between;font-size:0.85rem;margin-bottom:4px">
                 <span>Allocated: <strong>${total.toLocaleString()}</strong> / ${cap.toLocaleString()}</span>
@@ -2440,8 +2436,6 @@
     function addDayAlloc(dayNum) {
         if (!settings) return;
         const day = appData.days[dayNum - 1];
-        const todayStr = new Date().toISOString().split('T')[0];
-        if (day.date <= todayStr) return alert('Allocations are locked for today and past days.');
         saveAllocInputs(dayNum);
         const orgId = document.getElementById('modal-alloc-org').value;
         const qty = parseInt(document.getElementById('modal-alloc-qty').value) || 0;
@@ -2489,8 +2483,6 @@
 
     function removeDayAlloc(dayNum, orgId) {
         const day = appData.days[dayNum - 1];
-        const todayStr = new Date().toISOString().split('T')[0];
-        if (day.date <= todayStr) return alert('Allocations are locked for today and past days.');
         saveAllocInputs(dayNum);  // Preserve existing input values
         day.allocations = day.allocations.filter(a => a.orgId !== orgId);
         day.locked = true;
